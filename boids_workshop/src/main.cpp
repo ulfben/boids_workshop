@@ -4,7 +4,7 @@
 #include <span>
 #include <string_view>
 
-constexpr bool INTERACT_MOUSE = true;
+constexpr bool INTERACT_MOUSE = false;
 constexpr auto CLEAR_COLOR = WHITE;
 constexpr int STAGE_WIDTH = 1080;
 constexpr int STAGE_HEIGHT = 720;
@@ -33,34 +33,33 @@ constexpr static Vector2 random_range(const Vector2& min, const Vector2& max) no
 
 class Boid{
 public:
-   static constexpr float MAX_VELOCITY = 5.0f;
+   static constexpr float MAX_VELOCITY = 200.0f; //pixels per second
    static constexpr float PERCEPTION_RADIUS = 200;
-   static constexpr float COHESION_WEIGHT = 0.16f;
-   static constexpr float ALIGNMENT_WEIGHT = 0.11f;
    static constexpr float BOID_SIZE = 5.0f;
    static constexpr float SEPARATION_DISTANCE = BOID_SIZE * 3;
-   static constexpr float SEPARATION_WEIGHT = 0.18f;
    static constexpr float MOUSE_AVOID_DISTANCE = 120.0f;
-   static constexpr float MOUSE_AVOID_WEIGHT = 0.14f;
-   static constexpr float MOUSE_SEEK_WEIGHT = 0.3f;
+   static constexpr float COHESION_WEIGHT = MAX_VELOCITY * 0.2f;  //I scale by MAX_VELOCITY to ensure that each beahavior's 
+   static constexpr float ALIGNMENT_WEIGHT = MAX_VELOCITY * 0.2f;  //acceleration force is able to change velocity by a noticeable
+   static constexpr float SEPARATION_WEIGHT = MAX_VELOCITY * 0.8f; //fraction each frame.
+   static constexpr float MOUSE_AVOID_WEIGHT = MAX_VELOCITY * 0.14f;
+   static constexpr float MOUSE_SEEK_WEIGHT = MAX_VELOCITY * 0.2f;
 
    Vector2 position = random_range({0.0f, 0.0f}, {STAGE_WIDTH, STAGE_HEIGHT});
-   Vector2 velocity = random_range({-MAX_VELOCITY, -MAX_VELOCITY}, {MAX_VELOCITY, MAX_VELOCITY});   
+   Vector2 velocity = {0.0f, 0.0f};
 
-   void update(std::span<Boid> boids){
-      apply_separation(boids, SEPARATION_DISTANCE);
-      apply_alignment(boids, PERCEPTION_RADIUS);
-      apply_cohesion(boids, PERCEPTION_RADIUS);
+   void update(std::span<Boid> boids, float dt) noexcept{
+      Vector2 acceleration = {0, 0};
+      acceleration += get_cohesion(boids, PERCEPTION_RADIUS);
+      acceleration += get_alignment(boids, PERCEPTION_RADIUS);
+      acceleration += get_separation(boids, SEPARATION_DISTANCE);
 
       if constexpr(INTERACT_MOUSE){
-        seek_point(GetMousePosition(), MOUSE_SEEK_WEIGHT);
-        /*if(is_inside(STAGE_WIDTH, STAGE_HEIGHT)){
-           avoid_point(GetMousePosition(), MOUSE_AVOID_DISTANCE, MOUSE_AVOID_WEIGHT);
-        } else{
-           seek_point(GetMousePosition(), MOUSE_SEEK_WEIGHT);
-        }*/
-      }
-      move();
+         acceleration += seek_point(GetMousePosition(), MOUSE_SEEK_WEIGHT);         
+      }     
+      velocity += acceleration;
+      velocity = Vector2ClampValue(velocity, 0, MAX_VELOCITY);
+      position += velocity * dt;
+      world_wrap();
    }
 
    void render() const{
@@ -74,23 +73,19 @@ private:
          position.y < BOID_SIZE || position.y > height - BOID_SIZE);
    }
 
-   void move(){
-      velocity.x = Clamp(velocity.x, -MAX_VELOCITY, MAX_VELOCITY);
-      velocity.y = Clamp(velocity.y, -MAX_VELOCITY, MAX_VELOCITY);
-      position += velocity;
-      if constexpr(!INTERACT_MOUSE){
-         if(position.x > STAGE_WIDTH) position.x -= STAGE_WIDTH;
-         if(position.x < 0) position.x += STAGE_WIDTH;
-         if(position.y > STAGE_HEIGHT) position.y -= STAGE_HEIGHT;
-         if(position.y < 0) position.y += STAGE_HEIGHT;
-      }
+   void world_wrap() noexcept{
+      if(position.x > STAGE_WIDTH) position.x -= STAGE_WIDTH;
+      if(position.x < 0) position.x += STAGE_WIDTH;
+      if(position.y > STAGE_HEIGHT) position.y -= STAGE_HEIGHT;
+      if(position.y < 0) position.y += STAGE_HEIGHT;
    }
 
    float distance_to(const Boid& other) const{
       return Vector2Length(position - other.position);
    }
 
-   void apply_separation(std::span<const Boid> boids, float minDistance){
+   Vector2 get_separation(std::span<const Boid> boids, float minDistance) const{
+      Vector2 totalSeparation{0, 0};
       for(const auto& other : boids){
          if(&other == this) continue;
          float distance = distance_to(other);
@@ -98,12 +93,13 @@ private:
 
          Vector2 diff = position - other.position;
          float repulsionFactor = (minDistance - distance) / distance;
-         Vector2 repulsion = Vector2Normalize(diff) * (SEPARATION_WEIGHT * repulsionFactor);
-         velocity += repulsion;
+         totalSeparation += Vector2Normalize(diff) * repulsionFactor;
+         //totalSeparation += Vector2Normalize(diff) * repulsionFactor * SEPARATION_WEIGHT;         
       }
+      return Vector2Normalize(totalSeparation) * SEPARATION_WEIGHT;
    }
 
-   void apply_alignment(std::span<const Boid> boids, float maxDistance){    
+   Vector2 get_alignment(std::span<const Boid> boids, float maxDistance) const{
       Vector2 avgHeading{0, 0};
       int count = 0;
       for(const auto& other : boids){
@@ -119,11 +115,12 @@ private:
 
       if(count > 0){
          avgHeading *= (1.0f / to_float(count));
-         velocity += Vector2Normalize(avgHeading) * ALIGNMENT_WEIGHT;
+         return Vector2Normalize(avgHeading) * ALIGNMENT_WEIGHT;
       }
+      return avgHeading;
    }
 
-   void apply_cohesion(std::span<const Boid> boids, float maxDistance){
+   Vector2 get_cohesion(std::span<const Boid> boids, float maxDistance) const noexcept{
       Vector2 centerOfMass{0, 0};
       int count = 0;
 
@@ -135,26 +132,28 @@ private:
 
       if(count > 0){
          centerOfMass *= (1.0f / to_float(count));
-         seek_point(centerOfMass, COHESION_WEIGHT);
+         return seek_point(centerOfMass, COHESION_WEIGHT);
       }
+      return {0, 0};
    }
 
-   void seek_point(Vector2 target, float weight){
+   Vector2 seek_point(Vector2 target, float weight) const noexcept{
       Vector2 desired = target - position;
       float distance = Vector2Length(desired);
-      if(distance > 0){         
-         velocity += Vector2Normalize(desired) * weight;
+      if(distance > 0){
+         return Vector2Normalize(desired) * weight;
       }
+      return {0, 0};
+
    }
 
-   void avoid_point(Vector2 point, float minDistance, float weight) noexcept{
+   Vector2 avoid_point(Vector2 point, float minDistance, float weight) const noexcept{
       float distance = Vector2Length(position - point);
       if(distance > minDistance){
-         return;
+         return {0,0};
       }
       Vector2 diff = position - point;
-      Vector2 repulsion = Vector2Normalize(diff) * (weight * (minDistance - distance) / distance);
-      velocity += repulsion;
+      return Vector2Normalize(diff) * (weight * (minDistance - distance) / distance);
    }
 };
 
@@ -189,7 +188,7 @@ int main(){
    std::vector<Boid> boids(BOID_COUNT);
    while(!window.shouldClose()){
       for(auto& boid : boids){
-         boid.update(boids);
+         boid.update(boids, GetFrameTime());
       }
       window.draw(boids);
    }
