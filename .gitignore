@@ -63,16 +63,6 @@ TestResults/
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 
-# NuGet
-# Package management files. The packages themselves should be restored from 
-# NuGet servers rather than stored in the repository. This saves space and 
-# ensures everyone uses the same package versions through the package manager.
-.nuget/   # NuGet package cache
-*.nupkg   # NuGet package files
-*.snupkg  # NuGet symbol package files
-**/[Pp]ackages/*
-!**/[Pp]ackages/build/
-
 # Keep vendor files
 # Exception to allow committing third-party dependencies in the vendor directory.
 # This can be useful when you want to:
