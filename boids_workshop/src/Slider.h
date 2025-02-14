@@ -66,12 +66,9 @@ public:
       DrawRectangleF(bounds.x, bounds.y + bounds.height / 2 - 1, bounds.width, 2, GRAY);
 
       float knobX = getKnobX();
-
       DrawCircleF(knobX, bounds.y + bounds.height / 2, 8, BLACK);
-
-      std::string valueText = formatValue();
-
-      DrawTextF(valueText, bounds.x + bounds.width + 10, bounds.y, FONT_SIZE, BLACK);
+      
+      DrawTextF(formatValue(), bounds.x + bounds.width + 10, bounds.y, FONT_SIZE, BLACK);
    }
 
    float bottom() const noexcept{
