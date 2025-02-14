@@ -190,7 +190,9 @@ int main(){
    auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Boids Simulation");
    std::vector<Boid> boids(BOID_COUNT);
    float test = 0.0f;
-   Slider cohesionSlider("Cohesion", &test, 0, Boid::MAX_VELOCITY, 10, 30);
+   int test2 = 0;
+   Slider cohesionSlider("Cohesion", &test, 0.0f, 1.0f, 10, 30);
+   Slider numBoids("Num boids", &test2, 1, 100, 10, cohesionSlider.bottom());   
 
    while(!window.shouldClose()){
       for(auto& boid : boids){
@@ -199,6 +201,8 @@ int main(){
       window.draw(boids);
       cohesionSlider.update();
       cohesionSlider.draw();
+      numBoids.update();
+      numBoids.draw();
    }
    return 0;
 }
