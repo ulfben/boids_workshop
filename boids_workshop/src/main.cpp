@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
+#include "Slider.h"
 #include <vector>
 #include <span>
 #include <string_view>
@@ -166,6 +167,7 @@ struct Window final{
    ~Window(){
       CloseWindow();
    }
+
    void draw(std::span<Boid> boids) const noexcept{
       BeginDrawing();
       ClearBackground(CLEAR_COLOR);
@@ -178,6 +180,7 @@ struct Window final{
       DrawFPS(10, 10);
       EndDrawing();
    }
+
    bool shouldClose() const noexcept{
       return WindowShouldClose() || IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_Q);
    }
@@ -186,11 +189,16 @@ struct Window final{
 int main(){
    auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Boids Simulation");
    std::vector<Boid> boids(BOID_COUNT);
+   float test = 0.0f;
+   Slider cohesionSlider("Cohesion", &test, 0, Boid::MAX_VELOCITY, 10, 30);
+
    while(!window.shouldClose()){
       for(auto& boid : boids){
          boid.update(boids, GetFrameTime());
       }
       window.draw(boids);
+      cohesionSlider.update();
+      cohesionSlider.draw();
    }
    return 0;
 }
