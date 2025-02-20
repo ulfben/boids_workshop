@@ -56,19 +56,20 @@ struct BoidConfig{
    Color color = RED;
    float size = 8.0f;
    float vision_range = 100.0f;     // how far a boid “sees” others
-   float cohesion_weight = 0.2f;    // strength of moving toward group center
-   float alignment_weight = 0.8f;   // strength of matching speed and direction (eg: velocity) of group
+   float cohesion_weight = 1.0f;    // strength of moving toward group center
+   float alignment_weight = 0.6f;   // strength of matching speed and direction (eg: velocity) of group
    float separation_weight = 2.0f;  // strength of keeping distance
    float separation_range = 100.0f; // the distance at which separation kicks in. the closer they get, the stronger the force
    float drag = 0.01f;              // simple drag applied to the velocity
    float min_speed = 50.0f;
    float max_speed = 150.0f;
 
-   std::array<Slider, 4> sliders{
+   std::array<Slider, 5> sliders{
        Slider{"Vision", &vision_range, 0.0f, 180.0f},
        Slider{"Separation weight", &separation_weight, 0.0f, 20.0f},
        Slider{"Separation range", &separation_range, min_speed, 180},
-       Slider{"Alignment weight", &alignment_weight, 0.0f, 20.0f}
+       Slider{"Alignment weight", &alignment_weight, 0.0f, 20.0f},
+       Slider{"Cohesion weight", &cohesion_weight, 0.0f, 20.0f}
    };
 
    void update() noexcept{
@@ -107,6 +108,7 @@ struct Boid{
       Vector2 acceleration = {0, 0};
       acceleration += separation();
       acceleration += alignment();
+      acceleration += cohesion();
       acceleration += drag();
 
       velocity += acceleration * deltaTime;
@@ -146,6 +148,19 @@ struct Boid{
       return steer * globalConfig.alignment_weight;
    }
 
+   Vector2 cohesion() const noexcept {
+      Vector2 sum = {0, 0};
+      int count = 0;
+      for(auto other : visibleBoids){
+         sum += other->position;
+         count++;
+      }
+      if(count == 0){ return ZERO; }
+      Vector2 average_position = sum / to_float(count);
+      Vector2 steer = average_position - position;
+      return steer * globalConfig.cohesion_weight;
+   }
+
    Vector2 drag() const noexcept{
       return velocity * -globalConfig.drag;
    }
@@ -163,11 +178,11 @@ struct Boid{
 
    void debug_render() const noexcept{
       render();
-      DrawCircle(static_cast<int>(position.x), static_cast<int>(position.y), globalConfig.vision_range, Fade(globalConfig.color, 0.1f));
+      DrawCircleV(position, globalConfig.vision_range, Fade(globalConfig.color, 0.1f));      
       for(auto other : visibleBoids){
          DrawLineV(position, other->position, Fade(globalConfig.color, 0.1f));
       }
-      DrawCircle(static_cast<int>(position.x), static_cast<int>(position.y), 2, BLACK);
+      DrawCircleV(position, 2, BLACK);
    }
 };
 
@@ -203,7 +218,7 @@ struct Window final{
 };
 
 int main(){
-   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Flocking #3 - Separation, Alignment");
+   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Flocking #4 - Separation, Alignment, Cohesion");
    std::vector<Boid> boids(BOID_COUNT);
    bool isPaused = false;
    while(!window.should_close()){
