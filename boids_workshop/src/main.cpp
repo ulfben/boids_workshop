@@ -55,19 +55,13 @@ struct BoidConfig{
    using Slider = Slider<float>;
    Color color = RED;
    float size = 8.0f;
-   float vision_range = 180.0f;     // how far a boid “sees” others
-   float cohesion_weight = 0.2f;    // strength of moving toward group center
-   float alignment_weight = 0.3f;   // strength of matching speed and direction (eg: velocity) of group
-   float separation_weight = 4.0f;  // strength of keeping distance
-   float separation_range = 180.0f; // the distance at which separation kicks in. the closer they get, the stronger the force
+   float vision_range = 180.0f;     // how far a boid “sees” others   
    float drag = 0.01f;              // simple drag applied to the velocity
    float min_speed = 50.0f;
    float max_speed = 150.0f;
 
-   std::array<Slider, 3> sliders{
-       Slider{"Vision", &vision_range, 0.0f, 180.0f},
-       Slider{"Separation weight", &separation_weight, 0.0f, 20.0f},
-       Slider{"Separation range", &separation_range, min_speed, 180}
+   std::array<Slider, 1> sliders{
+       Slider{"Vision", &vision_range, 0.0f, 180.0f}   
    };
 
    void update() noexcept{
@@ -103,8 +97,7 @@ struct Boid{
    }
 
    void update(float deltaTime) noexcept{
-      Vector2 acceleration = {0, 0};
-      acceleration += separation();
+      Vector2 acceleration = {0, 0};   
       acceleration += drag();
 
       velocity += acceleration * deltaTime;
@@ -112,24 +105,7 @@ struct Boid{
 
       position += velocity * deltaTime;
       position = world_wrap(position, STAGE_SIZE);
-   }
-
-   Vector2 separation() const noexcept{
-      Vector2 steer = {0, 0};
-      int count = 0;
-      for(auto other : visibleBoids){
-         Vector2 offset = position - other->position;
-         float distance = Vector2Length(offset);
-         if(distance < globalConfig.separation_range){
-            Vector2 diff = Vector2Normalize(offset); // Compute a vector pointing away from the neighbor.
-            steer += diff * (globalConfig.separation_range - distance); // The magnitude is (separationRange - distance) so that the force grows as the boids get closer.                     
-            count++;
-         }
-      }
-      // Average the contributions from all neighbors, and scale by separactionFactor
-      return count > 0 ? (steer / to_float(count)) * globalConfig.separation_weight
-         : steer;
-   }
+   }     
 
    Vector2 drag() const noexcept{
       return velocity * -globalConfig.drag;
@@ -188,7 +164,7 @@ struct Window final{
 };
 
 int main(){
-   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Boids Simulation");
+   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Flocking #1 (no behaviors)");
    std::vector<Boid> boids(BOID_COUNT);
    bool isPaused = false;
    while(!window.should_close()){
