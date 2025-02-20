@@ -35,7 +35,7 @@ class Slider{
 
 public:
    Slider(std::string_view label, T* value, T min, T max,
-      float x, float y, float width = 200, float height = FONT_SIZE) noexcept
+      float x = 10.0f, float y = 10.0f, float width = 200, float height = FONT_SIZE) noexcept
       : label(label), value(value), min(min), max(max),
       bounds{x, y + FONT_SIZE, width, height}{
       assert(value != nullptr);
@@ -59,7 +59,7 @@ public:
       }      
    }
 
-   void render() noexcept{
+   void render() const noexcept{
       DrawTextF(label, bounds.x, bounds.y - FONT_SIZE, FONT_SIZE, BLACK);
 
       //draw the slider center line
@@ -71,8 +71,12 @@ public:
       DrawTextF(formatValue(), bounds.x + bounds.width + 10, bounds.y, FONT_SIZE, BLACK);
    }
 
+   void top(float y) noexcept{
+      bounds.y = y;
+   }
+
    float bottom() const noexcept{
-      return bounds.y + bounds.height;
+      return bounds.y + bounds.height + FONT_SIZE;
    }
 private:
    float getKnobX() const noexcept{
