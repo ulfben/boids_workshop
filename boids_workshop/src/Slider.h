@@ -1,16 +1,17 @@
 #pragma once
 #include "raylib.h"
 #include "raymath.h"
-#include <cassert>
-#include <string>
 #include <string_view>
-#include <format>
+#include <cassert>
+#include <cmath>
 #include <concepts>
+#include <format>
+#include <string>
 
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
 
-// Float versions of raylib drawing functions
+// float versions of raylib drawing functions
 static void DrawRectangleF(float x, float y, float width, float height, Color color){
    DrawRectangle(static_cast<int>(x), static_cast<int>(y),
       static_cast<int>(width), static_cast<int>(height), color);
@@ -39,6 +40,7 @@ public:
       : label(label), value(value), min(min), max(max),
       bounds{x, y + FONT_SIZE, width, height}{
       assert(value != nullptr);
+      assert(min < max);
    }
 
    void update() noexcept{
@@ -63,12 +65,12 @@ public:
       DrawTextF(label, bounds.x, bounds.y - FONT_SIZE, FONT_SIZE, BLACK);
 
       //draw the slider center line
-      DrawRectangleF(bounds.x, bounds.y + bounds.height / 2 - 1, bounds.width, 2, GRAY);
+      DrawRectangleF(bounds.x, bounds.y + bounds.height / 2.0f - 1.0f, bounds.width, 2.0f, GRAY);
 
       float knobX = getKnobX();
-      DrawCircleF(knobX, bounds.y + bounds.height / 2, 8, BLACK);
+      DrawCircleF(knobX, bounds.y + bounds.height / 2.0f, 8.0f, BLACK);
       
-      DrawTextF(formatValue(), bounds.x + bounds.width + 10, bounds.y, FONT_SIZE, BLACK);
+      DrawTextF(formatValue(), bounds.x + bounds.width + 10.0f, bounds.y, FONT_SIZE, BLACK);
    }
 
    void top(float y) noexcept{

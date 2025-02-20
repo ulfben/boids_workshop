@@ -2,10 +2,11 @@
 #include "raymath.h"
 #include "Slider.h"
 #include <array>
-#include <vector>
+#include <cmath>
+#include <cstdlib>
 #include <span>
 #include <string_view>
-#include <cmath>
+#include <vector>
 
 constexpr int STAGE_WIDTH = 1280;
 constexpr int STAGE_HEIGHT = 720;
@@ -56,17 +57,17 @@ struct BoidConfig{
    float size = 8.0f;
    float vision_range = 180.0f;     // how far a boid “sees” others
    float cohesion_weight = 0.2f;    // strength of moving toward group center
-   float alignment_weight = 0.3f;   // strength of matching velocity
+   float alignment_weight = 0.3f;   // strength of matching speed and direction (eg: velocity) of group
    float separation_weight = 4.0f;  // strength of keeping distance
-   float min_distance = 80.0f;     // how close is “too close”
-   float drag = 0.01f;             // simple drag applied to the velocity
+   float separation_range = 180.0f; // the distance at which separation kicks in. the closer they get, the stronger the force
+   float drag = 0.01f;              // simple drag applied to the velocity
    float min_speed = 50.0f;
    float max_speed = 150.0f;
 
    std::array<Slider, 3> sliders{
        Slider{"Vision", &vision_range, 0.0f, 180.0f},
-       Slider{"Separation", &separation_weight, 0.0f, 20.0f},
-       Slider{"Min. distance", &min_distance, min_speed, vision_range}
+       Slider{"Separation weight", &separation_weight, 0.0f, 20.0f},
+       Slider{"Separation range", &separation_range, min_speed, 180}
    };
 
    void update() noexcept{
@@ -119,9 +120,9 @@ struct Boid{
       for(auto other : visibleBoids){
          Vector2 offset = position - other->position;
          float distance = Vector2Length(offset);
-         if(distance < globalConfig.min_distance){
+         if(distance < globalConfig.separation_range){
             Vector2 diff = Vector2Normalize(offset); // Compute a vector pointing away from the neighbor.
-            steer += diff * (globalConfig.min_distance - distance); // The magnitude is (separationRange - distance) so that the force grows as the boids get closer.                     
+            steer += diff * (globalConfig.separation_range - distance); // The magnitude is (separationRange - distance) so that the force grows as the boids get closer.                     
             count++;
          }
       }
@@ -135,10 +136,14 @@ struct Boid{
    }
 
    void render() const noexcept{
-      Vector2 dir = (Vector2Length(velocity) != 0) ? Vector2Normalize(velocity) : Vector2{1, 0};
-      float degAngle = std::atan2(dir.y, dir.x) * TO_DEG;
-      DrawPoly(position, 3, globalConfig.size, degAngle, globalConfig.color);
-      //DrawCircle(static_cast<int>(position.x), static_cast<int>(position.y), 1, BLACK);
+      Vector2 local_x = (Vector2Length(velocity) != 0) ? Vector2Normalize(velocity) : Vector2{1, 0};
+      Vector2 local_y = {-local_x.y, local_x.x};
+      float L = globalConfig.size;
+      float H = globalConfig.size;
+      Vector2 tip = position + (local_x * L * 1.4f);
+      Vector2 left = position - (local_x * L) + (local_y * H);
+      Vector2 right = position - (local_x * L) - (local_y * H);
+      DrawTriangle(tip, right, left, globalConfig.color);
    }
 
    void debug_render() const noexcept{
@@ -147,6 +152,7 @@ struct Boid{
       for(auto other : visibleBoids){
          DrawLineV(position, other->position, Fade(globalConfig.color, 0.1f));
       }
+      DrawCircle(static_cast<int>(position.x), static_cast<int>(position.y), 2, BLACK);
    }
 };
 
@@ -164,14 +170,14 @@ struct Window final{
       ClearBackground(CLEAR_COLOR);
       bool drawOnce = true;
       for(const auto& boid : boids){
+         boid.render();
          if(drawOnce){
             boid.debug_render();
             drawOnce = false;
-         } 
-         boid.render();
-      }      
+         }
+      }
       DrawText("Press SPACE to pause/unpause", 10, STAGE_HEIGHT - FONT_SIZE, FONT_SIZE, DARKGRAY);
-      DrawFPS(10, STAGE_HEIGHT - FONT_SIZE*2);
+      DrawFPS(10, STAGE_HEIGHT - FONT_SIZE * 2);
       globalConfig.render();
       EndDrawing();
    }
