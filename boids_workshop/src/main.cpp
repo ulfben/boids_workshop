@@ -119,20 +119,18 @@ struct Boid{
    }
 
    Vector2 separation() const noexcept{
-      Vector2 steer = {0, 0};
+      Vector2 steer{0, 0};
       int count = 0;
       for(auto other : visibleBoids){
          Vector2 offset = position - other->position;
          float distance = Vector2Length(offset);
          if(distance < globalConfig.separation_range){
-            Vector2 away_dir = Vector2Normalize(offset); // Compute a vector pointing away from the neighbor.
-            steer += away_dir * (globalConfig.separation_range - distance); // The magnitude is (separationRange - distance) so that the force grows as the boids get closer.                     
-            count++;
+            steer += Vector2Normalize(offset) * (globalConfig.separation_range - distance); // normalize a vector pointing away from other, and scale it by the inverse of the distance
+            ++count;
          }
       }
-      // Average the contributions from all neighbors, and scale by separactionFactor
-      return count > 0 ? (steer / to_float(count)) * globalConfig.separation_weight
-         : steer;
+      if(count == 0){ return ZERO; } 
+      return (steer / to_float(count)) * globalConfig.separation_weight; // average the contributions from all neighbors, and scale by separaction weight
    }
 
    Vector2 alignment() const noexcept{
@@ -148,7 +146,7 @@ struct Boid{
       return steer * globalConfig.alignment_weight;
    }
 
-   Vector2 cohesion() const noexcept {
+   Vector2 cohesion() const noexcept{
       Vector2 sum = {0, 0};
       int count = 0;
       for(auto other : visibleBoids){
@@ -178,7 +176,7 @@ struct Boid{
 
    void debug_render() const noexcept{
       render();
-      DrawCircleV(position, globalConfig.vision_range, Fade(globalConfig.color, 0.1f));      
+      DrawCircleV(position, globalConfig.vision_range, Fade(globalConfig.color, 0.1f));
       for(auto other : visibleBoids){
          DrawLineV(position, other->position, Fade(globalConfig.color, 0.1f));
       }
