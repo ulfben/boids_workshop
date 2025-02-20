@@ -59,7 +59,7 @@ public:
       }      
    }
 
-   void draw() noexcept{
+   void render() noexcept{
       DrawTextF(label, bounds.x, bounds.y - FONT_SIZE, FONT_SIZE, BLACK);
 
       //draw the slider center line
