@@ -28,6 +28,10 @@ constexpr static float range01() noexcept{
    return to_float(GetRandomValue(0, RAND_MAX)) / RAND_MAXF;
 }
 
+constexpr static float unit_range() noexcept {
+    return (range01() * 2.0f) - 1.0f;
+}
+
 constexpr static float random_range(float min, float max) noexcept{
    return min + ((max - min) * range01());
 }
@@ -92,14 +96,14 @@ BoidConfig globalConfig{}; // default configuration
 struct Boid{
    Vector2 position = random_range(ZERO, STAGE_SIZE);
    Vector2 velocity = vector_from_angle(random_range(0.0f, 360.0f) * TO_RAD, globalConfig.min_speed);
-   std::vector<const Boid*> visibleBoids; // non-owning pointers to nearby boids
+   std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
 
    void update_visible_boids(std::span<const Boid> boids){
-      visibleBoids.clear();
+      visible_boids.clear();
       for(auto& other : boids){
-         if(&other == this) continue; //don't add ourselves to the list
+         if(&other == this){ continue; } //don't add ourselves to the list
          if(Vector2Distance(position, other.position) < globalConfig.vision_range){
-            visibleBoids.push_back(&other);
+            visible_boids.push_back(&other);
          }
       }
    }
@@ -121,7 +125,7 @@ struct Boid{
    Vector2 separation() const noexcept{
       Vector2 steer{0, 0};
       int count = 0;
-      for(auto other : visibleBoids){
+      for(auto other : visible_boids){
          Vector2 offset = position - other->position;
          float distance = Vector2Length(offset);
          if(distance < globalConfig.separation_range){
@@ -130,13 +134,13 @@ struct Boid{
          }
       }
       if(count == 0){ return ZERO; } 
-      return (steer / to_float(count)) * globalConfig.separation_weight; // average the contributions from all neighbors, and scale by separaction weight
+      return (steer / to_float(count)) * globalConfig.separation_weight; // average the contributions from all neighbors, and scale by separation weight
    }
 
    Vector2 alignment() const noexcept{
       Vector2 sum{0, 0};
       int count = 0;
-      for(auto other : visibleBoids){
+      for(auto other : visible_boids){
          sum += other->velocity;
          count++;
       }
@@ -149,7 +153,7 @@ struct Boid{
    Vector2 cohesion() const noexcept{
       Vector2 sum = {0, 0};
       int count = 0;
-      for(auto other : visibleBoids){
+      for(auto other : visible_boids){
          sum += other->position;
          count++;
       }
@@ -175,12 +179,13 @@ struct Boid{
    }
 
    void debug_render() const noexcept{
-      render();
-      DrawCircleV(position, globalConfig.vision_range, Fade(globalConfig.color, 0.1f));
-      for(auto other : visibleBoids){
-         DrawLineV(position, other->position, Fade(globalConfig.color, 0.1f));
+      const auto debug_color = Fade(globalConfig.color, 0.1f);
+      render();      
+      DrawCircleV(position, globalConfig.vision_range, debug_color);
+      for(auto other : visible_boids){
+         DrawLineV(position, other->position, debug_color);
       }
-      DrawCircleV(position, 2, BLACK);
+      DrawCircleV(position, 1, BLACK);
    }
 };
 
