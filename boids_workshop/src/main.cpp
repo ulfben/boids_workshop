@@ -7,6 +7,7 @@
 #include <span>
 #include <string_view>
 #include <vector>
+#include "QuadTree.h"
 
 constexpr int STAGE_WIDTH = 1280;
 constexpr int STAGE_HEIGHT = 720;
@@ -15,7 +16,7 @@ constexpr Vector2 ZERO = {0.0f, 0.0f};
 constexpr auto CLEAR_COLOR = WHITE;
 constexpr float TO_RAD = DEG2RAD;
 constexpr float TO_DEG = RAD2DEG;
-constexpr int BOID_COUNT = 8;
+constexpr int BOID_COUNT = 80;
 constexpr int TARGET_FPS = 60;
 constexpr int FONT_SIZE = 20;
 
@@ -117,17 +118,13 @@ struct Boid final{
    std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
    float wander_angle = 0.0f; // Persistent wandering angle
 
-   void update_visible_boids(std::span<const Boid> boids){
+   void update_visible_boids(const QuadTree<Boid>& quad_tree){
       visible_boids.clear();
-      for(auto& other : boids){
-         if(&other == this){ continue; } //don't add ourselves to the list
-         if(Vector2Distance(position, other.position) < globalConfig.vision_range){
-            visible_boids.push_back(&other);
-         }
-      }
+      Rectangle nearby = {position.x - globalConfig.vision_range, position.y - globalConfig.vision_range, globalConfig.vision_range * 2, globalConfig.vision_range * 2};
+      quad_tree.query_range(nearby, visible_boids);      
    }
 
-   void update(float deltaTime, std::span<const Obstacle> obstacles) noexcept{
+   void update(float deltaTime, [[maybe_unused]] std::span<const Obstacle> obstacles) noexcept{
       Vector2 acceleration = {0, 0};
       acceleration += obstacle_avoidance(obstacles);
       acceleration += separation();
@@ -253,7 +250,7 @@ struct Window final{
       CloseWindow();
    }
 
-   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles) const noexcept{
+   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles, const QuadTree<Boid>& quad_tree) const noexcept{
       BeginDrawing();
       ClearBackground(CLEAR_COLOR);
       bool drawOnce = true;
@@ -267,6 +264,7 @@ struct Window final{
       for(const auto& obstacle : obstacles){
          obstacle.render();
       }
+      quad_tree.render();
       DrawText("Press SPACE to pause/unpause", 10, STAGE_HEIGHT - FONT_SIZE, FONT_SIZE, DARKGRAY);
       DrawFPS(10, STAGE_HEIGHT - FONT_SIZE * 2);
       globalConfig.render();
@@ -279,23 +277,30 @@ struct Window final{
 };
 
 int main(){
-   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #5 - Flocking + wander, obstacle avoidance");
+   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #6 - flocking, wander, obstacle avoidance + spatial partitioning");
    std::vector<Boid> boids(BOID_COUNT);
    std::vector<Obstacle> obstacles(10);
+   Rectangle stage_rect = {0, 0, static_cast<float>(STAGE_WIDTH), static_cast<float>(STAGE_HEIGHT)};
+   QuadTree<Boid> quad_tree(stage_rect, 6);
+
    bool isPaused = false;
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
       if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;
-
+      quad_tree.clear();
       globalConfig.update();
 
+      for (auto& boid : boids) {
+         quad_tree.insert(&boid);
+      }
+
       for(auto& boid : boids){
-         boid.update_visible_boids(boids);
+         boid.update_visible_boids(quad_tree);
          if(isPaused) continue;
          boid.update(deltaTime, obstacles);
       }
 
-      window.render(boids, obstacles);
+      window.render(boids, obstacles, quad_tree);
    }
    return 0;
 }
