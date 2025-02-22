@@ -15,7 +15,7 @@ constexpr Vector2 ZERO = {0.0f, 0.0f};
 constexpr auto CLEAR_COLOR = WHITE;
 constexpr float TO_RAD = DEG2RAD;
 constexpr float TO_DEG = RAD2DEG;
-constexpr int BOID_COUNT = 80;
+constexpr int BOID_COUNT = 8;
 constexpr int TARGET_FPS = 60;
 constexpr int FONT_SIZE = 20;
 
@@ -28,8 +28,8 @@ constexpr static float range01() noexcept{
    return to_float(GetRandomValue(0, RAND_MAX)) / RAND_MAXF;
 }
 
-constexpr static float unit_range() noexcept {
-    return (range01() * 2.0f) - 1.0f;
+constexpr static float unit_range() noexcept{
+   return (range01() * 2.0f) - 1.0f;
 }
 
 constexpr static float random_range(float min, float max) noexcept{
@@ -54,8 +54,17 @@ constexpr static Vector2 world_wrap(Vector2 pos, Vector2 world_size) noexcept{
    else if(pos.y < 0) pos.y += world_size.y;
    return pos;
 }
+struct Obstacle final{
+   Vector2 position = random_range({50.0f, 50.0f}, STAGE_SIZE);
+   float radius = random_range(15.0f, 50.0f);
+   Color color = BLUE;
 
-struct BoidConfig{
+   void render() const noexcept{
+      DrawCircleV(position, radius, color);
+   }
+};
+
+struct BoidConfig final{
    using Slider = Slider<float>;
    Color color = RED;
    float size = 8.0f;
@@ -67,13 +76,22 @@ struct BoidConfig{
    float drag = 0.01f;              // simple drag applied to the velocity
    float min_speed = 50.0f;
    float max_speed = 150.0f;
+   float obstacle_avoidance_margin = 110.0f;
+   float obstacle_avoidance_weight = 2.0f; // strength of avoiding obstacles
+   float wander_distance = 50.0f;  // distance ahead of the boid to project the wander circle
+   float wander_radius = 25.0f;    // size of the wander circle
+   float wander_jitter = 0.3f;     // how much the wander angle changes each frame
+   float wander_weight = 1.0f;     // steering force weight for wander behavior
+   float seek_weight = 1.0f;       // steering force weight for seek behavior
 
-   std::array<Slider, 5> sliders{
+   std::array<Slider, 7> sliders{
        Slider{"Vision", &vision_range, 0.0f, 180.0f},
        Slider{"Separation weight", &separation_weight, 0.0f, 20.0f},
        Slider{"Separation range", &separation_range, min_speed, 180},
        Slider{"Alignment weight", &alignment_weight, 0.0f, 20.0f},
-       Slider{"Cohesion weight", &cohesion_weight, 0.0f, 20.0f}
+       Slider{"Cohesion weight", &cohesion_weight, 0.0f, 20.0f},
+       Slider{"Obstacle weight", &obstacle_avoidance_weight, 0.0f, 20.0f},
+       Slider{"Obstacle margin", &obstacle_avoidance_margin, size, 180.0f}
    };
 
    void update() noexcept{
@@ -93,10 +111,11 @@ struct BoidConfig{
 
 BoidConfig globalConfig{}; // default configuration
 
-struct Boid{
+struct Boid final{
    Vector2 position = random_range(ZERO, STAGE_SIZE);
    Vector2 velocity = vector_from_angle(random_range(0.0f, 360.0f) * TO_RAD, globalConfig.min_speed);
    std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
+   float wander_angle = 0.0f; // Persistent wandering angle
 
    void update_visible_boids(std::span<const Boid> boids){
       visible_boids.clear();
@@ -108,11 +127,13 @@ struct Boid{
       }
    }
 
-   void update(float deltaTime) noexcept{
+   void update(float deltaTime, std::span<const Obstacle> obstacles) noexcept{
       Vector2 acceleration = {0, 0};
+      acceleration += obstacle_avoidance(obstacles);
       acceleration += separation();
       acceleration += alignment();
       acceleration += cohesion();
+      acceleration += wander();
       acceleration += drag();
 
       velocity += acceleration * deltaTime;
@@ -120,6 +141,40 @@ struct Boid{
 
       position += velocity * deltaTime;
       position = world_wrap(position, STAGE_SIZE);
+   }
+      
+   Vector2 obstacle_avoidance(std::span<const Obstacle> obstacles) const noexcept{
+      Vector2 steer{0, 0};
+      int count = 0;
+      for(const auto& obs : obstacles){
+         float safe_distance = obs.radius + globalConfig.obstacle_avoidance_margin;
+         float distance = Vector2Distance(position, obs.position);
+         if(distance < safe_distance){
+            Vector2 away = Vector2Normalize(position - obs.position);
+            // Scale the force by how deep the boid is within the safe distance.
+            steer += away * (safe_distance - distance);
+            ++count;
+         }
+      }
+      if(count == 0){ return ZERO; }
+      return (steer / to_float(count)) * globalConfig.obstacle_avoidance_weight;
+   }
+
+   Vector2 seek(Vector2 targetPos) const noexcept{
+      auto toward = Vector2Normalize(targetPos - position);
+      auto desired_velocity = toward * globalConfig.max_speed;
+      return (desired_velocity - velocity) * globalConfig.seek_weight;
+   }
+
+   Vector2 wander() noexcept{
+      Vector2 circle_center = Vector2Normalize(velocity) * globalConfig.wander_distance;
+      wander_angle += unit_range() * globalConfig.wander_jitter;
+      Vector2 displacement = {
+          cos(wander_angle) * globalConfig.wander_radius,
+          sin(wander_angle) * globalConfig.wander_radius
+      };
+      Vector2 wanderTarget = position + circle_center + displacement;
+      return seek(wanderTarget) * globalConfig.wander_weight;
    }
 
    Vector2 separation() const noexcept{
@@ -133,7 +188,7 @@ struct Boid{
             ++count;
          }
       }
-      if(count == 0){ return ZERO; } 
+      if(count == 0){ return ZERO; }
       return (steer / to_float(count)) * globalConfig.separation_weight; // average the contributions from all neighbors, and scale by separation weight
    }
 
@@ -180,7 +235,7 @@ struct Boid{
 
    void debug_render() const noexcept{
       const auto debug_color = Fade(globalConfig.color, 0.1f);
-      render();      
+      render();
       DrawCircleV(position, globalConfig.vision_range, debug_color);
       for(auto other : visible_boids){
          DrawLineV(position, other->position, debug_color);
@@ -198,7 +253,7 @@ struct Window final{
       CloseWindow();
    }
 
-   void render(std::span<const Boid> boids) const noexcept{
+   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles) const noexcept{
       BeginDrawing();
       ClearBackground(CLEAR_COLOR);
       bool drawOnce = true;
@@ -208,6 +263,9 @@ struct Window final{
             boid.debug_render();
             drawOnce = false;
          }
+      }
+      for(const auto& obstacle : obstacles){
+         obstacle.render();
       }
       DrawText("Press SPACE to pause/unpause", 10, STAGE_HEIGHT - FONT_SIZE, FONT_SIZE, DARKGRAY);
       DrawFPS(10, STAGE_HEIGHT - FONT_SIZE * 2);
@@ -221,8 +279,9 @@ struct Window final{
 };
 
 int main(){
-   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Flocking #4 - Separation, Alignment, Cohesion");
+   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #5 - Flocking + wander, obstacle avoidance");
    std::vector<Boid> boids(BOID_COUNT);
+   std::vector<Obstacle> obstacles(10);
    bool isPaused = false;
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
@@ -233,10 +292,10 @@ int main(){
       for(auto& boid : boids){
          boid.update_visible_boids(boids);
          if(isPaused) continue;
-         boid.update(deltaTime);
+         boid.update(deltaTime, obstacles);
       }
 
-      window.render(boids);
+      window.render(boids, obstacles);
    }
    return 0;
 }
