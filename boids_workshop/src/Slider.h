@@ -1,3 +1,19 @@
+/**
+ * Boids Workshop
+ * -------------
+ * This code was written for educational purposes.
+ * Original repository: https://github.com/ulfben/boids_workshop/
+ * 
+ * License:
+ * This code is released under a permissive, attribution-friendly license.
+ * You are free to use, modify, and distribute it for any purpose - personal, 
+ * educational, or commercial.
+ * 
+ * While not required, attribution with a link back to the original repository 
+ * is appreciated if you find this code useful.
+ * 
+ * Copyright (c) 2025, Ulf Benjaminsson
+ */
 #pragma once
 #include "raylib.h"
 #include "raymath.h"

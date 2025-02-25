@@ -1,8 +1,25 @@
+/**
+ * Boids Workshop
+ * -------------
+ * This code was written for educational purposes.
+ * Original repository: https://github.com/ulfben/boids_workshop/
+ * 
+ * License:
+ * This code is released under a permissive, attribution-friendly license.
+ * You are free to use, modify, and distribute it for any purpose - personal, 
+ * educational, or commercial.
+ * 
+ * While not required, attribution with a link back to the original repository 
+ * is appreciated if you find this code useful.
+ * 
+ * Copyright (c) 2025, Ulf Benjaminsson
+ */
 #pragma once
 #include "raylib.h"
 #include <cassert>
 #include <memory>
 #include <vector>
+#include <span>
 
 template<class T>
 class QuadTree{
@@ -10,12 +27,12 @@ class QuadTree{
    Rectangle boundary = {};
    size_t capacity = 0;
    size_t depth = 0;
-   std::vector<T*> objects{};
+   std::vector<const T*> objects{};
    bool subdivided = false;
    std::unique_ptr<QuadTree> north_west{nullptr};
    std::unique_ptr<QuadTree> north_east{nullptr};
    std::unique_ptr<QuadTree> south_west{nullptr};
-   std::unique_ptr<QuadTree> south_east{nullptr};   
+   std::unique_ptr<QuadTree> south_east{nullptr};
 
    void subdivide(){
       float x = boundary.x;
@@ -37,7 +54,7 @@ class QuadTree{
 
       subdivided = true;
    }
-   
+
 public:
    QuadTree(const Rectangle& boundary, size_t capacity, size_t depth = 0)
       : boundary(boundary), capacity(capacity), depth(depth){
@@ -45,7 +62,15 @@ public:
       assert(capacity > 0);
    }
 
-   bool insert(T* obj){
+   bool insert(std::span<const T> values){
+      bool all_inserted = true;      
+      for(auto& obj : values){          
+         all_inserted &= insert(&obj);            
+      }
+      return all_inserted;
+   }
+
+   bool insert(const T* obj){
       if(!CheckCollisionPointRec(obj->position, boundary)){
          return false;
       }
@@ -53,7 +78,7 @@ public:
       if(objects.size() < capacity || depth >= MAX_DEPTH){
          objects.push_back(obj);
          return true;
-      } 
+      }
 
       if(!subdivided){
          subdivide();
@@ -62,16 +87,16 @@ public:
       if(north_east->insert(obj)) return true;
       if(south_west->insert(obj)) return true;
       if(south_east->insert(obj)) return true;
-      
+
       assert(false && "should not happen if obj is within the boundary");
       return false;
    }
-      
+
    void query_range(const Rectangle& range, std::vector<const T*>& found) const{
       if(!CheckCollisionRecs(boundary, range)){
          return;
       }
-      for(auto obj : objects){         
+      for(auto obj : objects){
          if(CheckCollisionPointRec(obj->position, range)){
             found.push_back(obj);
          }
@@ -99,12 +124,12 @@ public:
       }
    }
    void render() const noexcept{
-      DrawRectangleLinesEx(boundary, 1, GREEN);      
+      DrawRectangleLinesEx(boundary, 1, GREEN);
       if(subdivided){
          north_west->render();
          north_east->render();
          south_west->render();
          south_east->render();
       }
-   }   
+   }
 };

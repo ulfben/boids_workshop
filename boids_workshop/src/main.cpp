@@ -1,3 +1,20 @@
+/**
+ * Boids Workshop
+ * -------------
+ * This code was written for educational purposes.
+ * Original repository: https://github.com/ulfben/boids_workshop/
+ * 
+ * License:
+ * This code is released under a permissive, attribution-friendly license.
+ * You are free to use, modify, and distribute it for any purpose - personal, 
+ * educational, or commercial.
+ * 
+ * While not required, attribution with a link back to the original repository 
+ * is appreciated if you find this code useful.
+ * 
+ * Copyright (c) 2025, Ulf Benjaminsson
+ */
+
 #include "raylib.h"
 #include "raymath.h"
 #include "Slider.h"
@@ -12,11 +29,13 @@
 constexpr int STAGE_WIDTH = 1280;
 constexpr int STAGE_HEIGHT = 720;
 constexpr Vector2 STAGE_SIZE = {static_cast<float>(STAGE_WIDTH), static_cast<float>(STAGE_HEIGHT)};
+constexpr Rectangle STAGE_RECT = {0.0f, 0.0f, STAGE_SIZE.x, STAGE_SIZE.y};
 constexpr Vector2 ZERO = {0.0f, 0.0f};
 constexpr auto CLEAR_COLOR = WHITE;
 constexpr float TO_RAD = DEG2RAD;
 constexpr float TO_DEG = RAD2DEG;
 constexpr int BOID_COUNT = 80;
+constexpr int OBSTACLE_COUNT = 6;
 constexpr int TARGET_FPS = 60;
 constexpr int FONT_SIZE = 20;
 
@@ -70,29 +89,31 @@ struct BoidConfig final{
    Color color = RED;
    float size = 8.0f;
    float vision_range = 100.0f;     // how far a boid “sees” others
-   float cohesion_weight = 1.0f;    // strength of moving toward group center
-   float alignment_weight = 0.6f;   // strength of matching speed and direction (eg: velocity) of group
+   float cohesion_weight = 2.3f;    // strength of moving toward group center
+   float alignment_weight = 1.5f;   // strength of matching speed and direction (eg: velocity) of group
    float separation_weight = 2.0f;  // strength of keeping distance
    float separation_range = 100.0f; // the distance at which separation kicks in. the closer they get, the stronger the force
    float drag = 0.01f;              // simple drag applied to the velocity
    float min_speed = 50.0f;
    float max_speed = 150.0f;
    float obstacle_avoidance_margin = 110.0f;
-   float obstacle_avoidance_weight = 2.0f; // strength of avoiding obstacles
+   float obstacle_avoidance_weight = 3.5f; // strength of avoiding obstacles
    float wander_distance = 50.0f;  // distance ahead of the boid to project the wander circle
    float wander_radius = 25.0f;    // size of the wander circle
-   float wander_jitter = 0.3f;     // how much the wander angle changes each frame
-   float wander_weight = 1.0f;     // steering force weight for wander behavior
-   float seek_weight = 1.0f;       // steering force weight for seek behavior
+   float wander_jitter = 30.0f * TO_RAD;  // how much the wander angle changes each tick, in radians
+   float wander_weight = 1.3f;     // steering force weight for wander behavior
+   float seek_weight = 1.2f;       // steering force weight for seek behavior
 
-   std::array<Slider, 7> sliders{
+   std::array<Slider, 9> sliders{
        Slider{"Vision", &vision_range, 0.0f, 180.0f},
        Slider{"Separation weight", &separation_weight, 0.0f, 20.0f},
        Slider{"Separation range", &separation_range, min_speed, 180},
+       Slider{"Obstacle weight", &obstacle_avoidance_weight, 0.0f, 20.0f},
+       Slider{"Obstacle margin", &obstacle_avoidance_margin, size, 180.0f},
        Slider{"Alignment weight", &alignment_weight, 0.0f, 20.0f},
        Slider{"Cohesion weight", &cohesion_weight, 0.0f, 20.0f},
-       Slider{"Obstacle weight", &obstacle_avoidance_weight, 0.0f, 20.0f},
-       Slider{"Obstacle margin", &obstacle_avoidance_margin, size, 180.0f}
+       Slider{"Wander weight", &wander_weight, 0.0f, 20.0f},
+       Slider{"Wander jitter", &wander_jitter, 0.0f, 2.0f * PI} // 2PI radians is a full circle
    };
 
    void update() noexcept{
@@ -110,7 +131,7 @@ struct BoidConfig final{
    }
 };
 
-BoidConfig globalConfig{}; // default configuration
+BoidConfig globalConfig{}; // default configuration for all boids
 
 struct Boid final{
    Vector2 position = random_range(ZERO, STAGE_SIZE);
@@ -120,11 +141,14 @@ struct Boid final{
 
    void update_visible_boids(const QuadTree<Boid>& quad_tree){
       visible_boids.clear();
-      Rectangle nearby = {position.x - globalConfig.vision_range, position.y - globalConfig.vision_range, globalConfig.vision_range * 2, globalConfig.vision_range * 2};
-      quad_tree.query_range(nearby, visible_boids);      
+      quad_tree.query_range(nearby(), visible_boids);      
    }
 
-   void update(float deltaTime, [[maybe_unused]] std::span<const Obstacle> obstacles) noexcept{
+   Rectangle nearby() const noexcept{
+      return {position.x - globalConfig.vision_range, position.y - globalConfig.vision_range, globalConfig.vision_range * 2, globalConfig.vision_range * 2};
+   }
+
+   void update(float deltaTime, std::span<const Obstacle> obstacles) noexcept{
       Vector2 acceleration = {0, 0};
       acceleration += obstacle_avoidance(obstacles);
       acceleration += separation();
@@ -279,20 +303,18 @@ struct Window final{
 int main(){
    auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #6 - flocking, wander, obstacle avoidance + spatial partitioning");
    std::vector<Boid> boids(BOID_COUNT);
-   std::vector<Obstacle> obstacles(10);
-   Rectangle stage_rect = {0, 0, static_cast<float>(STAGE_WIDTH), static_cast<float>(STAGE_HEIGHT)};
-   QuadTree<Boid> quad_tree(stage_rect, 6);
-
+   std::vector<Obstacle> obstacles(OBSTACLE_COUNT);
+   
+   QuadTree<Boid> quad_tree(STAGE_RECT, 10); //10 is the capacity of each quad. If more than 10 boids are in a quad, it will subdivide  
+   
    bool isPaused = false;
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
       if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;
-      quad_tree.clear();
+      
       globalConfig.update();
-
-      for (auto& boid : boids) {
-         quad_tree.insert(&boid);
-      }
+      quad_tree.clear(); //since the boids are moving we must     
+      quad_tree.insert(boids); //rebuild the tree each frame
 
       for(auto& boid : boids){
          boid.update_visible_boids(quad_tree);
