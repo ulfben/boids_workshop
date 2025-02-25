@@ -3,10 +3,13 @@
 The workshop [slides are available here](https://docs.google.com/presentation/d/16s7chbrsmee56zuxw2G3M9JCvBaf5dSs_MCls67Ql80/edit?usp=sharing).
 
 This repo is demonstration application for my C++ workshop on flocking and other steering behaviours
-![Screenshot of the Flocking demo](https://github.com/ulfben/boids_workshop/blob/master/screenshot.jpg?raw=true)
 
+## Day 1: introducing steering behaviors and flocking
+![Screenshot of the flocking demo during day 1](https://github.com/ulfben/boids_workshop/blob/master/screenshot.jpg?raw=true)
 After an introduction to flocking the students are tasked with implementing individual steering behaviors like wander, evade, pursuit and arrive. 
-Day 2 focuses on performance and environment interaction; spatial partitioning, obstacle avoidance and wall avoidance.
+
+## Day 2: environment interactions and performance
+![Screenshot of the flocking demo during day 2](https://github.com/ulfben/boids_workshop/blob/master/screenshot_3.jpg?raw=true)
 
 ## License
 This code was written for educational purposes.
