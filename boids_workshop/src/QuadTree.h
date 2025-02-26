@@ -3,15 +3,15 @@
  * -------------
  * This code was written for educational purposes.
  * Original repository: https://github.com/ulfben/boids_workshop/
- * 
+ *
  * License:
  * This code is released under a permissive, attribution-friendly license.
- * You are free to use, modify, and distribute it for any purpose - personal, 
+ * You are free to use, modify, and distribute it for any purpose - personal,
  * educational, or commercial.
- * 
- * While not required, attribution with a link back to the original repository 
+ *
+ * While not required, attribution with a link back to the original repository
  * is appreciated if you find this code useful.
- * 
+ *
  * Copyright (c) 2025, Ulf Benjaminsson
  */
 #pragma once
@@ -20,12 +20,13 @@
 #include <memory>
 #include <vector>
 #include <span>
+#include <algorithm>
 
 template<class T>
 class QuadTree{
-   static constexpr size_t MAX_DEPTH = 8;
+   static constexpr size_t MAX_DEPTH = 5; //consider MAX_DEPTH = std::log2(STAGE_WIDTH / vision_range) as a starting point. Profile and adjust as needed.
    Rectangle boundary = {};
-   size_t capacity = 0;
+   size_t capacity = 0; // Max number of objects before subdividing. Consider std::sqrt(BOID_COUNT) as a starting point. Profile and adjust as needed. 
    size_t depth = 0;
    std::vector<const T*> objects{};
    bool subdivided = false;
@@ -55,17 +56,67 @@ class QuadTree{
       subdivided = true;
    }
 
+   static Rectangle compute_bounds_of(std::span<const T> objects){
+      if(objects.empty()){
+         return {0, 0, 0, 0};
+      }
+      auto [min_x_it, max_x_it] = std::ranges::minmax_element(objects,
+         [](const T& a, const T& b){ return a.position.x < b.position.x; }
+      );
+      auto [min_y_it, max_y_it] = std::ranges::minmax_element(objects,
+         [](const T& a, const T& b){ return a.position.y < b.position.y; }
+      );
+      float min_x = min_x_it->position.x;
+      float max_x = max_x_it->position.x;
+      float min_y = min_y_it->position.y;
+      float max_y = max_y_it->position.y;
+
+      const float padding = 1.0f; // Add padding to avoid objects exactly at the boundary
+      return {
+         min_x - padding,
+         min_y - padding,
+         (max_x - min_x) + 2 * padding,
+         (max_y - min_y) + 2 * padding
+      };
+   }
+
 public:
    QuadTree(const Rectangle& boundary, size_t capacity, size_t depth = 0)
       : boundary(boundary), capacity(capacity), depth(depth){
       assert(depth <= MAX_DEPTH);
       assert(capacity > 0);
+      objects.reserve(capacity);
+   }
+   
+   QuadTree(const Rectangle& boundary, size_t capacity, std::span<const T> objects_) : QuadTree(boundary, capacity, 0){
+      assert(!objects_.empty());
+      insert(objects_);
    }
 
-   bool insert(std::span<const T> values){
-      bool all_inserted = true;      
-      for(auto& obj : values){          
-         all_inserted &= insert(&obj);            
+   QuadTree(std::span<const T> objects_, size_t capacity)
+      : QuadTree(compute_bounds_of(objects_), capacity, 0){
+      assert(!objects_.empty());
+      insert(objects_);
+   }
+
+   bool rebuild_and_fit_to(std::span<const T> objects_){
+      assert(!objects_.empty() && "Cannot resize boundary with an empty collection");
+      assert(depth == 0 && "resize_and_insert must be called on the root node only");
+      clear();
+      boundary = compute_bounds_of(objects_);
+      return insert(objects_);
+   };
+
+   bool rebuild(std::span<const T> objects_){      
+      assert(depth == 0 && "rebuild must be called on the root node only");
+      clear();      
+      return insert(objects_);
+   }
+
+   bool insert(std::span<const T> objects_){
+      bool all_inserted = true;
+      for(auto& obj : objects_){
+         all_inserted &= insert(&obj);
       }
       return all_inserted;
    }

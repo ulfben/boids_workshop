@@ -301,20 +301,18 @@ struct Window final{
 };
 
 int main(){
-   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #6 - flocking, wander, obstacle avoidance + spatial partitioning");
+   auto window = Window(STAGE_WIDTH, STAGE_HEIGHT, "Steering #7 - tweaking the quadtree");
    std::vector<Boid> boids(BOID_COUNT);
-   std::vector<Obstacle> obstacles(OBSTACLE_COUNT);
-   
-   QuadTree<Boid> quad_tree(STAGE_RECT, 10); //10 is the capacity of each quad. If more than 10 boids are in a quad, it will subdivide  
-   
+   std::vector<Obstacle> obstacles(OBSTACLE_COUNT); 
+   int capacity = static_cast<int>(std::sqrt(BOID_COUNT)); //Square root of total objects is a good starting point. Profile and adjust as needed!
+   QuadTree<Boid> quad_tree(STAGE_RECT, capacity, boids); //If more than capacity boids are in a quad, it will subdivide     
    bool isPaused = false;
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
       if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;
-      
-      globalConfig.update();
-      quad_tree.clear(); //since the boids are moving we must     
-      quad_tree.insert(boids); //rebuild the tree each frame
+            
+      quad_tree.rebuild(boids);
+      globalConfig.update();     
 
       for(auto& boid : boids){
          boid.update_visible_boids(quad_tree);
