@@ -25,6 +25,7 @@
 #include <string_view>
 #include <vector>
 #include "QuadTree.h"
+#include "LinearQuadTree.hpp"
 
 constexpr int STAGE_WIDTH = 1280;
 constexpr int STAGE_HEIGHT = 720;
@@ -139,7 +140,7 @@ struct Boid final{
    std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
    float wander_angle = 0.0f; // Persistent wandering angle
 
-   void update_visible_boids(const QuadTree<Boid>& quad_tree){
+   void update_visible_boids(const LinearQuadTree<Boid>& quad_tree){
       visible_boids.clear();
       quad_tree.query_range(nearby(), visible_boids);      
    }
@@ -274,7 +275,7 @@ struct Window final{
       CloseWindow();
    }
 
-   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles, const QuadTree<Boid>& quad_tree) const noexcept{
+   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles, const LinearQuadTree<Boid>& quad_tree) const noexcept{
       BeginDrawing();
       ClearBackground(CLEAR_COLOR);
       bool drawOnce = true;
@@ -305,8 +306,10 @@ int main(){
    std::vector<Boid> boids(BOID_COUNT);
    std::vector<Obstacle> obstacles(OBSTACLE_COUNT); 
    int capacity = static_cast<int>(std::sqrt(BOID_COUNT)); //Square root of total objects is a good starting point. Profile and adjust as needed!
-   QuadTree<Boid> quad_tree(STAGE_RECT, capacity, boids); //If more than capacity boids are in a quad, it will subdivide     
+   //QuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity); //If more than capacity boids are in a quad, it will subdivide     
+   LinearQuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity, 5);
    bool isPaused = false;
+
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
       if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;

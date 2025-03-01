@@ -88,7 +88,7 @@ public:
       objects.reserve(capacity);
    }
    
-   QuadTree(const Rectangle& boundary, size_t capacity, std::span<const T> objects_) : QuadTree(boundary, capacity, 0){
+   QuadTree(const Rectangle& boundary, std::span<const T> objects_, size_t capacity) : QuadTree(boundary, capacity, 0){
       assert(!objects_.empty());
       insert(objects_);
    }
@@ -101,7 +101,7 @@ public:
 
    bool rebuild_and_fit_to(std::span<const T> objects_){
       assert(!objects_.empty() && "Cannot resize boundary with an empty collection");
-      assert(depth == 0 && "resize_and_insert must be called on the root node only");
+      assert(depth == 0 && "rebuild_and_fit_to must be called on the root node only");
       clear();
       boundary = compute_bounds_of(objects_);
       return insert(objects_);
