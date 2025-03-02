@@ -24,12 +24,12 @@ class LinearQuadTree{
       BottomRight = 3
    };
 
-   struct Node final{            
+   struct Node final{
       Rectangle boundary{0, 0, 0, 0};
       index_t data_begin = 0;  // starting index into the 'data' vector.
       count_t data_count = 0;  // number of objects stored in this node.      
       node_idx quads[4] = {NoChild, NoChild, NoChild, NoChild};
-      
+
       constexpr bool is_leaf() const noexcept{
          return (quads[0] == NoChild && quads[1] == NoChild && quads[2] == NoChild && quads[3] == NoChild);
       }
@@ -49,8 +49,11 @@ class LinearQuadTree{
    count_t capacity = 8;   // objects per quad before subdivision
    count_t max_depth = 5;  // maximum depth allowed
 
-   constexpr index_t to_index(std::vector<const T*>::const_iterator iter) const noexcept{
-      return static_cast<index_t>(std::distance(data.begin(), iter));
+   //Reorders elements in-place such that elements satisfying the predicate come before those that do not. 
+   //The returned index is the boundary between these two groups.
+   constexpr index_t partition_data(index_t start, index_t end, auto predicate) noexcept{
+      auto iter = std::partition(data.begin() + start, data.begin() + end, predicate);
+      return static_cast<index_t>(iter - data.begin());
    }
 
    // Recursively builds the tree by partitioning the vector of pointers in-place.
@@ -62,38 +65,28 @@ class LinearQuadTree{
       const auto nodeIndex = static_cast<node_idx>(nodes.size());
       nodes.emplace_back(bound, start);
       Node& node = nodes.back();
-            
-      if(count_t count = end - start; 
+
+      if(count_t count = end - start;
          count <= capacity || depth >= max_depth){
          node.data_count = count;
          return nodeIndex;
       }
       // This node will not store any objects; its children will. 
-      // So we subdivide into four quads, and arrange the objects in 'data' based on screen position.
-      // Note that std algorithms use iterators but we work with indices, hence the to_index conversions.
+      // So we subdivide into four quads, and arrange the objects in 'data' based on screen position.      
       
-      //0. Compute some useful values
+      // 1. Split vertically: objects in top half of 'bounds' will be in the first half of 'data', objects in bottom half go in second half   
       const Vector2 center = {bound.x + bound.width * 0.5f, bound.y + bound.height * 0.5f};
-      const auto first = data.begin() + start;
-      const auto last = data.begin() + end;      
-      
-      // 1. Split vertically: objects in top half of 'bounds' will be in the first half of 'data', objects in bottom half go in second half
-      const auto split_y = std::partition(first, last, [center](const T* p){
+      const index_t idx_split_y = partition_data(start, end, [center](const T* p){
          return p->position.y < center.y;
-      });
-      const index_t idx_split_y = to_index(split_y);
-
+         });
       // 2. Split top half horizontally: objects in top-left quadrant of 'bounds' go in first quarter of 'data', followed by objects in the top-right quadrant
-      const auto split_x_left = std::partition(first, split_y, [center](const T* p){
+      const index_t idx_split_x_left = partition_data(start, idx_split_y, [center](const T* p){
          return p->position.x < center.x;
-      });
-      const index_t idx_split_x_left = to_index(split_x_left);
-
-      // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of 'data', followed by objects in the bottom-right quadrant
-      const auto split_x_right = std::partition(split_y, last, [center](const T* p){
+         });
+         // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of 'data', followed by objects in the bottom-right quadrant
+      const index_t idx_split_x_right = partition_data(idx_split_y, end, [center](const T* p){
          return p->position.x < center.x;
-      });
-      const index_t idx_split_x_right = to_index(split_x_right);
+         });
 
       const float x = bound.x;
       const float y = bound.y;
@@ -119,7 +112,7 @@ class LinearQuadTree{
       return nodeIndex;
    }
 
-   void query_range_recursive(node_idx nodeIndex, const Rectangle& range, std::vector<const T*>& found) const{      
+   void query_range_recursive(node_idx nodeIndex, const Rectangle& range, std::vector<const T*>& found) const{
       if(nodeIndex == NoChild || nodeIndex >= nodes.size()){
          return;
       }
@@ -145,7 +138,7 @@ class LinearQuadTree{
    static Rectangle compute_bounds_of(std::span<const T> objects) noexcept{
       if(objects.empty()){ return {0, 0, 0, 0}; }
       auto [min_x, min_y] = objects[0].position;
-      auto [max_x, max_y] = objects[0].position;      
+      auto [max_x, max_y] = objects[0].position;
       for(size_t i = 1; i < objects.size(); ++i){
          const auto& pos = objects[i].position;
          if(pos.x < min_x) min_x = pos.x;
@@ -178,18 +171,18 @@ public:
       nodes.clear();
       data.clear();
       if(objects.empty()){ return; }
-            
+
       data.reserve(objects.size());
       for(auto& obj : objects){ //NOTE: if objects are guarantueed to be within the bounds, you can skip this filtering!
          if(CheckCollisionPointRec(obj.position, boundary)){
             data.push_back(std::addressof(obj));
-         }         
-      }      
-      if(data.empty()){ return; } 
+         }
+      }
+      if(data.empty()){ return; }
       build_tree(0, static_cast<index_t>(data.size()), boundary, 0);
    }
 
-   void rebuild_and_fit_to(std::span<const T> objects){     
+   void rebuild_and_fit_to(std::span<const T> objects){
       boundary = compute_bounds_of(objects);
       rebuild(objects);
    }
