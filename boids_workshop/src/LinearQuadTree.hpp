@@ -14,7 +14,7 @@ class LinearQuadTree{
    using node_idx = uint32_t; // index to a node in the 'nodes' vector
    using index_t = uint32_t; // index to an object in the original collection or data vector
    using count_t = uint32_t; // number of objects in a node or distance between two indexes.
-   static constexpr node_idx NoChild = static_cast<node_idx>(-1);
+   static constexpr node_idx NO_CHILD = static_cast<node_idx>(-1);
    static constexpr node_idx ROOT_ID = 0;
 
    enum class Quadrant : uint8_t{
@@ -28,10 +28,10 @@ class LinearQuadTree{
       Rectangle boundary{0, 0, 0, 0};
       index_t data_begin = 0;  // starting index into the 'data' vector.
       count_t data_count = 0;  // number of objects stored in this node.      
-      node_idx quads[4] = {NoChild, NoChild, NoChild, NoChild};
+      node_idx quads[4] = {NO_CHILD, NO_CHILD, NO_CHILD, NO_CHILD};
 
       constexpr bool is_leaf() const noexcept{
-         return (quads[0] == NoChild && quads[1] == NoChild && quads[2] == NoChild && quads[3] == NoChild);
+         return (quads[0] == NO_CHILD && quads[1] == NO_CHILD && quads[2] == NO_CHILD && quads[3] == NO_CHILD);
       }
 
       constexpr node_idx& operator[](Quadrant quadrant) noexcept{
@@ -56,8 +56,8 @@ class LinearQuadTree{
       return static_cast<index_t>(iter - data.begin());
    }
 
-   // Recursively builds the tree by partitioning the vector of pointers in-place.
-   // 'data' vector holds the pointers; [start, end) is the subrange to work on.
+   // Recursively builds the tree by partitioning the 'data'-vector in-place.
+   // 'data' holds all objects, [start, end) is the subrange to work on.
    // 'bound' is the current node's boundary and 'depth' the current recursion depth.
    // Returns the index of the new node in the 'nodes' vector.
    node_idx build_tree(index_t start, index_t end, const Rectangle& bound, count_t depth){
@@ -79,11 +79,13 @@ class LinearQuadTree{
       const index_t idx_split_y = partition_data(start, end, [center](const T* p){
          return p->position.y < center.y;
          });
+      
       // 2. Split top half horizontally: objects in top-left quadrant of 'bounds' go in first quarter of 'data', followed by objects in the top-right quadrant
       const index_t idx_split_x_left = partition_data(start, idx_split_y, [center](const T* p){
          return p->position.x < center.x;
          });
-         // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of 'data', followed by objects in the bottom-right quadrant
+      
+      // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of 'data', followed by objects in the bottom-right quadrant
       const index_t idx_split_x_right = partition_data(idx_split_y, end, [center](const T* p){
          return p->position.x < center.x;
          });
@@ -95,25 +97,25 @@ class LinearQuadTree{
 
       if(idx_split_x_left > start){
          Rectangle top_left = {x, y, w, h};
-         node[Quadrant::TopLeft] = build_tree(start, idx_split_x_left, top_left, depth + 1); //first quarter of 'data'
+         node[Quadrant::TopLeft] = build_tree(start, idx_split_x_left, top_left, depth + 1); //first quarter
       }
       if(idx_split_y > idx_split_x_left){
          Rectangle top_right = {x + w, y, w, h};
-         node[Quadrant::TopRight] = build_tree(idx_split_x_left, idx_split_y, top_right, depth + 1); //second quarter of 'data'
+         node[Quadrant::TopRight] = build_tree(idx_split_x_left, idx_split_y, top_right, depth + 1); //second quarter
       }
       if(idx_split_x_right > idx_split_y){
          Rectangle bottom_left = {x, y + h, w, h};
-         node[Quadrant::BottomLeft] = build_tree(idx_split_y, idx_split_x_right, bottom_left, depth + 1); //third quarter of 'data'
+         node[Quadrant::BottomLeft] = build_tree(idx_split_y, idx_split_x_right, bottom_left, depth + 1); //third quarter
       }
       if(end > idx_split_x_right){
          Rectangle bottom_right = {x + w, y + h, w, h};
-         node[Quadrant::BottomRight] = build_tree(idx_split_x_right, end, bottom_right, depth + 1); //fourth quarter of 'data'
+         node[Quadrant::BottomRight] = build_tree(idx_split_x_right, end, bottom_right, depth + 1); //fourth quarter
       }
       return nodeIndex;
    }
 
    void query_range_recursive(node_idx nodeIndex, const Rectangle& range, std::vector<const T*>& found) const{
-      if(nodeIndex == NoChild || nodeIndex >= nodes.size()){
+      if(nodeIndex == NO_CHILD || nodeIndex >= nodes.size()){
          return;
       }
       const Node& node = nodes[nodeIndex];
