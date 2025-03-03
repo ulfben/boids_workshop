@@ -23,23 +23,25 @@ class SIMDQuadTree{
       BottomRight = 3
    };
    struct alignas(16) SIMDRect{
-      static_assert(sizeof(SIMDRect) == 16, "SIMDRect should be 16 bytes for good SIMD performance");
       union{
-         struct RectBounds{
+#pragma warning(disable : 4201) //nonstandard extension used: nameless struct/union. TODO: fix the problem instead of suppressing the warning...
+         struct{
             float minX, minY; //more suitable representation of a rect
             float maxX, maxY;
-         } bounds;
+         };
+#pragma warning(default : 4201)
          __m128 vec; // SSE vector for SIMD operations
       };
-
-      constexpr SIMDRect() noexcept : bounds{0, 0, 0, 0}{}
-      explicit constexpr SIMDRect(const Rectangle& r) noexcept :
-         bounds{r.x, r.y, r.x + r.width, r.y + r.height}{}
+      SIMDRect(const Rectangle& r) :
+         minX(r.x), minY(r.y),
+         maxX(r.x + r.width), maxY(r.y + r.height){}
+      SIMDRect() : minX(0), minY(0), maxX(0), maxY(0){}
 
       constexpr Rectangle to_rect() const noexcept{
-         return {bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY};
-      }      
+         return {minX, minY, maxX - minX, maxY - minY};
+      }
    };
+   static_assert(sizeof(SIMDRect) == 16, "SIMDRect should be 16 bytes for good SIMD performance");
 
    struct Node final{
       SIMDRect boundary;
@@ -71,34 +73,33 @@ class SIMDQuadTree{
    count_t max_depth = 5;  // maximum depth allowed
 
    static bool CheckCollisionRectsSIMD(const SIMDRect& r1, const SIMDRect& r2) noexcept{
-#if defined(__AVX__) || defined(__AVX2__) //TODO: something more cross plattform would be nice. '__SSE4_1__' seems to be standard elsewhere.
-      // Load rectangle bounds into SSE registers
+#if defined(__AVX__) || defined(__AVX2__) 
+    // Load rectangle bounds into SSE registers
       __m128 r1v = r1.vec;
       __m128 r2v = r2.vec;
-      __m128 r2v_shuf = _mm_shuffle_ps(r2v, r2v, _MM_SHUFFLE(1, 0, 3, 2)); // Shuffle r2 to get [maxX, maxY, minX, minY]
+      // Extract min and max values from r2
+      __m128 r2_min = _mm_shuffle_ps(r2v, r2v, _MM_SHUFFLE(1, 0, 1, 0)); // [minY, minX, minY, minX]
+      __m128 r2_max = _mm_shuffle_ps(r2v, r2v, _MM_SHUFFLE(3, 2, 3, 2)); // [maxY, maxX, maxY, maxX]
 
-      // Compare r1.min <= r2.max && r1.max >= r2.min
-      // Now we have [r1.minX <= r2.maxX, r1.minY <= r2.maxY, r1.maxX >= r2.minX, r1.maxY >= r2.minY]
-      __m128 cmp1 = _mm_cmple_ps(r1v, _mm_shuffle_ps(r2v_shuf, r2v_shuf, _MM_SHUFFLE(1, 0, 1, 0)));
-      __m128 cmp2 = _mm_cmpge_ps(_mm_shuffle_ps(r1v, r1v, _MM_SHUFFLE(3, 2, 3, 2)), r2v_shuf);
+      // Extract min and max values from r1
+      __m128 r1_min = _mm_shuffle_ps(r1v, r1v, _MM_SHUFFLE(1, 0, 1, 0)); // [minY, minX, minY, minX]
+      __m128 r1_max = _mm_shuffle_ps(r1v, r1v, _MM_SHUFFLE(3, 2, 3, 2)); // [maxY, maxX, maxY, maxX]
 
-      // Combine comparisons with bitwise AND
-      __m128 result = _mm_and_ps(cmp1, cmp2);
-
-      // Extract the first and second elements, then the third and fourth elements
-      int res1 = _mm_extract_ps(result, 0) & _mm_extract_ps(result, 1);
-      int res2 = _mm_extract_ps(result, 2) & _mm_extract_ps(result, 3);
-
-      // Final result:
-      int mask = _mm_movemask_ps(result);
-      return (mask == 0b1111); // All four conditions must be true.
-#else 
-      // non-simd fallback      
-      return (r1.minX <= r2.maxX && r1.maxX >= r2.minX && r1.minY <= r2.maxY && r1.maxY >= r2.minY);
+      // Perform comparisons
+      __m128 cmp_min = _mm_cmple_ps(r1_min, r2_max); // r1.minX <= r2.maxX, r1.minY <= r2.maxY
+      __m128 cmp_max = _mm_cmpge_ps(r1_max, r2_min); // r1.maxX >= r2.minX, r1.maxY >= r2.minY
+            
+      __m128 result = _mm_and_ps(cmp_min, cmp_max); // Combine results
+      // Check if all four conditions are met
+      return (_mm_movemask_ps(result) == 0b1111); // 0b1111 = all true
+#else    
+      return (r1.minX <= r2.maxX && r1.maxX >= r2.minX &&
+         r1.minY <= r2.maxY && r1.maxY >= r2.minY);
 #endif
    }
 
-   // Helper to check if a point is inside a rectangle
+
+      // Helper to check if a point is inside a rectangle
    static bool CheckCollisionPointRectSIMD(const Vector2& point, const SIMDRect& rect) noexcept{
       return (point.x >= rect.minX && point.x <= rect.maxX &&
          point.y >= rect.minY && point.y <= rect.maxY);
@@ -246,6 +247,6 @@ public:
    }
 
    void query_range(const Rectangle& range, std::vector<const T*>& found) const{
-      query_range_recursive(ROOT_ID, range, found);
+      query_range_recursive(ROOT_ID, SIMDRect(range), found);
    }
 };

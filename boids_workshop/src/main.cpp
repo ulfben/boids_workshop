@@ -40,6 +40,8 @@ constexpr int BOID_COUNT = 80;
 constexpr int OBSTACLE_COUNT = 6;
 constexpr int TARGET_FPS = 60;
 constexpr int FONT_SIZE = 20;
+struct Boid;
+using Tree = SIMDQuadTree<Boid>; //typedef for quickly changing between QuadTree, LinearQuadTree, and SIMDQuadTree
 
 constexpr static float to_float(int value) noexcept{
    return static_cast<float>(value);
@@ -141,7 +143,7 @@ struct Boid final{
    std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
    float wander_angle = 0.0f; // Persistent wandering angle
 
-   void update_visible_boids(const LinearQuadTree<Boid>& quad_tree){
+   void update_visible_boids(const Tree& quad_tree){
       visible_boids.clear();
       quad_tree.query_range(nearby(), visible_boids);      
    }
@@ -267,6 +269,9 @@ struct Boid final{
    }
 };
 
+
+
+
 struct Window final{
    Window(int width, int height, std::string_view title, int fps = TARGET_FPS){
       InitWindow(width, height, title.data());
@@ -276,7 +281,7 @@ struct Window final{
       CloseWindow();
    }
 
-   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles, const LinearQuadTree<Boid>& quad_tree) const noexcept{
+   void render(std::span<const Boid> boids, std::span<const Obstacle> obstacles, const Tree& quad_tree) const noexcept{
       BeginDrawing();
       ClearBackground(CLEAR_COLOR);
       bool drawOnce = true;
@@ -308,7 +313,8 @@ int main(){
    std::vector<Obstacle> obstacles(OBSTACLE_COUNT); 
    int capacity = static_cast<int>(std::sqrt(BOID_COUNT)); //Square root of total objects is a good starting point. Profile and adjust as needed!
    //QuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity); //If more than capacity boids are in a quad, it will subdivide     
-   LinearQuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity, 5);
+   //LinearQuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity, 5);
+   Tree quad_tree(STAGE_RECT, boids, capacity, 5);
    bool isPaused = false;
 
    while(!window.should_close()){
