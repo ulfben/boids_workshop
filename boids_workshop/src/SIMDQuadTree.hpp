@@ -25,23 +25,20 @@ class SIMDQuadTree{
    struct alignas(16) SIMDRect{
       static_assert(sizeof(SIMDRect) == 16, "SIMDRect should be 16 bytes for good SIMD performance");
       union{
-#pragma warning(disable : 4201) //nonstandard extension used: nameless struct/union. TODO: fix the problem instead of suppressing the warning...
-         struct{
+         struct RectBounds{
             float minX, minY; //more suitable representation of a rect
             float maxX, maxY;
-         };
-#pragma warning(default : 4201)
+         } bounds;
          __m128 vec; // SSE vector for SIMD operations
       };
 
-      constexpr SIMDRect() noexcept : minX(0), minY(0), maxX(0), maxY(0){}
+      constexpr SIMDRect() noexcept : bounds{0, 0, 0, 0}{}
       explicit constexpr SIMDRect(const Rectangle& r) noexcept :
-         minX(r.x), minY(r.y),
-         maxX(r.x + r.width), maxY(r.y + r.height){}
+         bounds{r.x, r.y, r.x + r.width, r.y + r.height}{}
 
       constexpr Rectangle to_rect() const noexcept{
-         return {minX, minY, maxX - minX, maxY - minY};
-      }
+         return {bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY};
+      }      
    };
 
    struct Node final{
@@ -243,7 +240,7 @@ public:
    }
 
    void render() const noexcept{
-      for(const auto& node : nodes){         
+      for(const auto& node : nodes){
          DrawRectangleLinesEx(node.to_rect(), 1, GREEN);
       }
    }
