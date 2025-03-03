@@ -49,11 +49,21 @@ class LinearQuadTree{
    count_t capacity = 8;   // objects per quad before subdivision
    count_t max_depth = 5;  // maximum depth allowed
 
-   //Reorders elements in-place such that elements satisfying the predicate come before those that do not. 
-   //The returned index is the boundary between these two groups.
+   //helper function to run std::partition and convert the boundary iterator to an index.
+   //partition reorders elements in-place such that elements satisfying the predicate come before those that do not. 
+   //the returned index is the boundary between these two groups.
    constexpr index_t partition_data(index_t start, index_t end, auto predicate) noexcept{
       auto iter = std::partition(data.begin() + start, data.begin() + end, predicate);
       return static_cast<index_t>(iter - data.begin());
+   }
+
+   // Helper function to build a child quad. Extracted to reduce the length of the build_tree function.
+   // Returns the node index of the created child, or NO_CHILD if no child was created
+   constexpr node_idx build_child_quad(index_t start, index_t end, const Rectangle& bound, count_t depth) {
+      if(start < end){
+         return build_tree(start, end, bound, depth + 1);
+      }
+      return NO_CHILD;
    }
 
    // Recursively builds the tree by partitioning the 'data'-vector in-place.
@@ -65,52 +75,34 @@ class LinearQuadTree{
       const auto nodeIndex = static_cast<node_idx>(nodes.size());
       nodes.emplace_back(bound, start);
       Node& node = nodes.back();
-
       if(count_t count = end - start;
          count <= capacity || depth >= max_depth){
          node.data_count = count;
          return nodeIndex;
       }
+
       // This node will not store any objects; its children will. 
-      // So we subdivide into four quads, and arrange the objects in 'data' based on screen position.      
-      
-      // 1. Split vertically: objects in top half of 'bounds' will be in the first half of 'data', objects in bottom half go in second half   
+      // So we subdivide into four quads, and arrange the objects in 'data' based on screen position.
       const Vector2 center = {bound.x + bound.width * 0.5f, bound.y + bound.height * 0.5f};
-      const index_t idx_split_y = partition_data(start, end, [center](const T* p){
-         return p->position.y < center.y;
-         });
-      
-      // 2. Split top half horizontally: objects in top-left quadrant of 'bounds' go in first quarter of 'data', followed by objects in the top-right quadrant
-      const index_t idx_split_x_left = partition_data(start, idx_split_y, [center](const T* p){
-         return p->position.x < center.x;
-         });
-      
-      // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of 'data', followed by objects in the bottom-right quadrant
-      const index_t idx_split_x_right = partition_data(idx_split_y, end, [center](const T* p){
-         return p->position.x < center.x;
-         });
+      const auto to_the_left = [center](const T* p) noexcept{ return p->position.x < center.x; };
+      const auto to_the_top = [center](const T* p) noexcept{ return p->position.y < center.y; };
+      // time to partition the [start, end) subrange inside the 'data' vector;
+      // 1. Split vertically: objects in top half of 'bounds' will be in the first half of the range, objects in bottom half go in second half   
+      const index_t idx_split_y = partition_data(start, end, to_the_top);
+      // 2. Split top half horizontally: objects in top-left quadrant of 'bounds' go in first quarter of the range, followed by objects in the top-right quadrant
+      const index_t idx_split_x_left = partition_data(start, idx_split_y, to_the_left);
+      // 3. Split bottom half horizontally: objects in bottom-left quadrant go in third quarter of the range, followed by objects in the bottom-right quadrant
+      const index_t idx_split_x_right = partition_data(idx_split_y, end, to_the_left);
 
       const float x = bound.x;
       const float y = bound.y;
       const float w = bound.width * 0.5f;
       const float h = bound.height * 0.5f;
 
-      if(idx_split_x_left > start){
-         Rectangle top_left = {x, y, w, h};
-         node[Quadrant::TopLeft] = build_tree(start, idx_split_x_left, top_left, depth + 1); //first quarter
-      }
-      if(idx_split_y > idx_split_x_left){
-         Rectangle top_right = {x + w, y, w, h};
-         node[Quadrant::TopRight] = build_tree(idx_split_x_left, idx_split_y, top_right, depth + 1); //second quarter
-      }
-      if(idx_split_x_right > idx_split_y){
-         Rectangle bottom_left = {x, y + h, w, h};
-         node[Quadrant::BottomLeft] = build_tree(idx_split_y, idx_split_x_right, bottom_left, depth + 1); //third quarter
-      }
-      if(end > idx_split_x_right){
-         Rectangle bottom_right = {x + w, y + h, w, h};
-         node[Quadrant::BottomRight] = build_tree(idx_split_x_right, end, bottom_right, depth + 1); //fourth quarter
-      }
+      node[Quadrant::TopLeft] = build_child_quad(start, idx_split_x_left, {x, y, w, h}, depth);
+      node[Quadrant::TopRight] = build_child_quad(idx_split_x_left, idx_split_y, {x + w, y, w, h}, depth);
+      node[Quadrant::BottomLeft] = build_child_quad(idx_split_y, idx_split_x_right, {x, y + h, w, h}, depth);
+      node[Quadrant::BottomRight] = build_child_quad(idx_split_x_right, end, {x + w, y + h, w, h}, depth);
       return nodeIndex;
    }
 
@@ -173,7 +165,6 @@ public:
       nodes.clear();
       data.clear();
       if(objects.empty()){ return; }
-
       data.reserve(objects.size());
       for(auto& obj : objects){ //NOTE: if objects are guarantueed to be within the bounds, you can skip this filtering!
          if(CheckCollisionPointRec(obj.position, boundary)){
@@ -181,6 +172,7 @@ public:
          }
       }
       if(data.empty()){ return; }
+      nodes.reserve(data.size() / (capacity / 2)); // just a rough estimate, but might save a few re-allocations.
       build_tree(0, static_cast<index_t>(data.size()), boundary, 0);
    }
 
@@ -189,7 +181,7 @@ public:
       rebuild(objects);
    }
 
-   void render() const{
+   void render() const noexcept{
       for(const auto& node : nodes){
          DrawRectangleLinesEx(node.boundary, 1, GREEN);
       }

@@ -307,14 +307,14 @@ int main(){
    std::vector<Obstacle> obstacles(OBSTACLE_COUNT); 
    int capacity = static_cast<int>(std::sqrt(BOID_COUNT)); //Square root of total objects is a good starting point. Profile and adjust as needed!
    //QuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity); //If more than capacity boids are in a quad, it will subdivide     
-   LinearQuadTree<Boid> quad_tree(boids, capacity, 5);
+   LinearQuadTree<Boid> quad_tree(STAGE_RECT, boids, capacity, 5);
    bool isPaused = false;
 
    while(!window.should_close()){
       float deltaTime = GetFrameTime();
       if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;
             
-      quad_tree.rebuild_and_fit_to(boids);
+      quad_tree.rebuild(boids);
       globalConfig.update();     
 
       for(auto& boid : boids){
