@@ -32,10 +32,9 @@ class SIMDQuadTree{
 #pragma warning(default : 4201)
          __m128 vec; // SSE vector for SIMD operations
       };
-      SIMDRect(const Rectangle& r) :
-         minX(r.x), minY(r.y),
-         maxX(r.x + r.width), maxY(r.y + r.height){}
-      SIMDRect() : minX(0), minY(0), maxX(0), maxY(0){}
+      SIMDRect() : minX(0), minY(0), maxX(0), maxY(0){}      
+      SIMDRect(const Rectangle& r) : minX(r.x), minY(r.y), maxX(r.x + r.width), maxY(r.y + r.height){}      
+      SIMDRect(float min_x, float min_y, float max_x, float max_y) : minX(min_x), minY(min_y), maxX(max_x), maxY(max_y) {}
 
       constexpr Rectangle to_rect() const noexcept{
          return {minX, minY, maxX - minX, maxY - minY};
@@ -88,7 +87,7 @@ class SIMDQuadTree{
       // Perform comparisons
       __m128 cmp_min = _mm_cmple_ps(r1_min, r2_max); // r1.minX <= r2.maxX, r1.minY <= r2.maxY
       __m128 cmp_max = _mm_cmpge_ps(r1_max, r2_min); // r1.maxX >= r2.minX, r1.maxY >= r2.minY
-            
+
       __m128 result = _mm_and_ps(cmp_min, cmp_max); // Combine results
       // Check if all four conditions are met
       return (_mm_movemask_ps(result) == 0b1111); // 0b1111 = all true
@@ -190,23 +189,66 @@ class SIMDQuadTree{
 
    static SIMDRect compute_bounds_of(std::span<const T> objects) noexcept{
       if(objects.empty()){ return {}; }
-      auto [min_x, min_y] = objects[0].position;
-      auto [max_x, max_y] = objects[0].position;
-      for(size_t i = 1; i < objects.size(); ++i){
-         const auto& pos = objects[i].position;
-         if(pos.x < min_x) min_x = pos.x;
-         if(pos.x > max_x) max_x = pos.x;
-         if(pos.y < min_y) min_y = pos.y;
-         if(pos.y > max_y) max_y = pos.y;
+
+      // Initialize min/max vectors with the highest/lowest possible values
+      __m128 min_vec = _mm_set1_ps(FLT_MAX);
+      __m128 max_vec = _mm_set1_ps(-FLT_MAX);
+
+      const size_t batch_size = 4;
+      size_t i = 0;
+
+      // Process objects in batches of 4
+      for(; i + batch_size <= objects.size(); i += batch_size){
+         float batch_x[4], batch_y[4];
+
+         // Load 4 objects into arrays
+         for(size_t j = 0; j < batch_size; j++){
+            batch_x[j] = objects[i + j].position.x;
+            batch_y[j] = objects[i + j].position.y;
+         }
+
+         // Load into SIMD registers
+         __m128 x_vec = _mm_loadu_ps(batch_x);
+         __m128 y_vec = _mm_loadu_ps(batch_y);
+
+         // Interleave x and y
+         __m128 xy_low = _mm_unpacklo_ps(x_vec, y_vec);  // [x0, y0, x1, y1]
+         __m128 xy_high = _mm_unpackhi_ps(x_vec, y_vec); // [x2, y2, x3, y3]
+
+         // Update min/max
+         min_vec = _mm_min_ps(min_vec, xy_low);
+         min_vec = _mm_min_ps(min_vec, xy_high);
+         max_vec = _mm_max_ps(max_vec, xy_low);
+         max_vec = _mm_max_ps(max_vec, xy_high);
       }
-      const float padding = 1.0f; // Add padding to avoid objects exactly at the boundary
-      return {Rectangle{
-          min_x - padding,
-          min_y - padding,
-          (max_x - min_x) + 2 * padding,
-          (max_y - min_y) + 2 * padding
-      }};
+
+      // Process remaining objects
+      for(; i < objects.size(); i++){
+         __m128 pos_vec = _mm_setr_ps(objects[i].position.x, objects[i].position.y, objects[i].position.x, objects[i].position.y);
+         min_vec = _mm_min_ps(min_vec, pos_vec);
+         max_vec = _mm_max_ps(max_vec, pos_vec);
+      }
+
+      // Horizontal reduction to extract min_x, min_y, max_x, max_y
+      __m128 min_shuf = _mm_shuffle_ps(min_vec, min_vec, _MM_SHUFFLE(2, 3, 0, 1)); // Swap pairs
+      __m128 max_shuf = _mm_shuffle_ps(max_vec, max_vec, _MM_SHUFFLE(2, 3, 0, 1));
+
+      min_vec = _mm_min_ps(min_vec, min_shuf);
+      max_vec = _mm_max_ps(max_vec, max_shuf);
+
+      float min_values[4], max_values[4];
+      _mm_storeu_ps(min_values, min_vec);
+      _mm_storeu_ps(max_values, max_vec);
+
+      float min_x = std::min(min_values[0], min_values[1]);
+      float min_y = std::min(min_values[2], min_values[3]);
+      float max_x = std::max(max_values[0], max_values[1]);
+      float max_y = std::max(max_values[2], max_values[3]);
+
+      const float padding = 1.0f;
+      return SIMDRect(min_x - padding, min_y - padding, max_x + padding, max_y + padding);
    }
+
 
 public:
    SIMDQuadTree() = default;
@@ -216,6 +258,8 @@ public:
       assert(max_depth > 0);
       rebuild(objects);
    }
+   SIMDQuadTree(const SIMDRect& boundary_, std::span<const T> objects, count_t capacity_, count_t max_depth_ = 5)
+      : SIMDQuadTree(boundary_.to_rect(), objects, capacity_, max_depth_){};
 
    SIMDQuadTree(std::span<const T> objects, count_t capacity_, count_t max_depth_ = 5)
       : SIMDQuadTree(compute_bounds_of(objects), objects, capacity_, max_depth_){}
