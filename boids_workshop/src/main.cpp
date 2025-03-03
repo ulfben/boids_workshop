@@ -26,6 +26,7 @@
 #include <vector>
 #include "QuadTree.h"
 #include "LinearQuadTree.hpp"
+#include "SIMDQuadTree.hpp"
 
 constexpr int STAGE_WIDTH = 1280;
 constexpr int STAGE_HEIGHT = 720;

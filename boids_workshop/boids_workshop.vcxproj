@@ -171,6 +171,7 @@
   <ItemGroup>
     <ClInclude Include="src\LinearQuadTree.hpp" />
     <ClInclude Include="src\QuadTree.h" />
+    <ClInclude Include="src\SIMDQuadTree.hpp" />
     <ClInclude Include="src\Slider.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
