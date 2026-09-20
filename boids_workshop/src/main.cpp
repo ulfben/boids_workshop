@@ -162,10 +162,11 @@ struct Boid final{
 	std::vector<const Boid*> visible_boids; // non-owning pointers to nearby boids
 	float wander_angle = 0.0f; // Persistent wandering angle
 
+	//finds other boids within (circular) vision_range, using shortest wrapped-world distance.
 	void update_visible_boids(const LinearQuadTree<Boid>& quad_tree){
 		visible_boids.clear();
 
-		const Rectangle range = nearby();
+		const Rectangle range = nearby(); // Broad phase: query the quadtree with a square that contains our circular vision range.
 
 		float x_offsets[2]{0.0f, 0.0f};
 		float y_offsets[2]{0.0f, 0.0f};
@@ -173,6 +174,7 @@ struct Boid final{
 		int x_count = 1;
 		int y_count = 1;
 
+		// If the query crosses a world edge, add a translated copy on the opposite side.
 		if(range.x < 0.0f){
 			x_offsets[x_count++] = STAGE_WIDTH;
 		} else if(range.x + range.width > STAGE_WIDTH){
@@ -184,7 +186,8 @@ struct Boid final{
 		} else if(range.y + range.height > STAGE_HEIGHT){
 			y_offsets[y_count++] = -STAGE_HEIGHT;
 		}
-
+		
+		// Query 1, 2, or 4 rectangles depending on whether the vision range crosses an edge or corner.
 		for(int y = 0; y < y_count; ++y){
 			for(int x = 0; x < x_count; ++x){
 				Rectangle wrapped = range;
@@ -193,8 +196,16 @@ struct Boid final{
 
 				quad_tree.query_range(wrapped, visible_boids);
 			}
-		}
-		std::erase(visible_boids, this); //we don't want ourselves to be included in the list of our neighbours. :) 
+		}		
+
+		 // Narrow phase: remove ourselves and discard boids outside the actual circular vision range.
+		std::erase_if(visible_boids, [this](const Boid* other){
+			if(other == this){
+				return true; 
+			}
+			const Vector2 offset = wrapped_offset(position, other->position);
+			return Vector2LengthSqr(offset) > globalConfig.vision_range * globalConfig.vision_range;
+		});
 	}
 
 	Rectangle nearby() const noexcept{
@@ -319,7 +330,8 @@ struct Boid final{
 		render();
 		DrawCircleV(position, globalConfig.vision_range, debug_color);
 		for(auto other : visible_boids){
-			DrawLineV(position, other->position, debug_color);
+			auto target = position + wrapped_offset(position, other->position); // Draw toward the neighbour's nearest wrapped position.
+			DrawLineV(position, target, debug_color);
 		}
 		DrawCircleV(position, 1, BLACK);
 	}
