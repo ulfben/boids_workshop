@@ -186,9 +186,6 @@ public:
       rebuild(objects);
    }
 
-   LinearQuadTree(std::span<const T> objects, count_t capacity_, count_t max_depth_ = 5)
-      : LinearQuadTree(compute_bounds_of(objects), objects, capacity_, max_depth_){}
-
    void rebuild(std::span<const T> objects){
       nodes.clear();
       data.clear();
