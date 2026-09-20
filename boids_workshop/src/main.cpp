@@ -231,11 +231,10 @@ struct Boid final{
 		int count = 0;
 		for(const auto& obs : obstacles){
 			float safe_distance = obs.radius + globalConfig.obstacle_avoidance_margin;
-			float to_index = Vector2Distance(position, obs.position);
-			if(to_index < safe_distance){
-				Vector2 away = Vector2Normalize(position - obs.position);
-				// Scale the force by how deep the boid is within the safe distance.
-				steer += away * (safe_distance - to_index);
+			Vector2 away = wrapped_offset(obs.position, position);
+			float distance = Vector2Length(away);
+			if(distance < safe_distance){
+				steer += Vector2Normalize(away) * (safe_distance - distance);
 				++count;
 			}
 		}
