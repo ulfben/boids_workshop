@@ -264,10 +264,10 @@ struct Boid final{
 		Vector2 steer{0, 0};
 		int count = 0;
 		for(auto other : visible_boids){
-			Vector2 offset = position - other->position;
-			float to_index = Vector2Length(offset);
-			if(to_index < globalConfig.separation_range){
-				steer += Vector2Normalize(offset) * (globalConfig.separation_range - to_index); // normalize a vector pointing away from other, and scale it by the inverse of the distance
+			Vector2 offset = wrapped_offset(other->position, position);
+			float distance = Vector2Length(offset);
+			if(distance < globalConfig.separation_range){
+				steer += Vector2Normalize(offset) * (globalConfig.separation_range - distance); // normalize a vector pointing away from other, and scale it by the inverse of the distance
 				++count;
 			}
 		}
@@ -292,13 +292,12 @@ struct Boid final{
 		Vector2 sum = {0, 0};
 		int count = 0;
 		for(auto other : visible_boids){
-			sum += other->position;
+			sum += wrapped_offset(position, other->position);
 			count++;
 		}
 		if(count == 0){ return ZERO; }
-		Vector2 average_position = sum / to_float(count);
-		Vector2 steer = average_position - position;
-		return steer * globalConfig.cohesion_weight;
+		Vector2 average_offset = sum / to_float(count);
+		return average_offset * globalConfig.cohesion_weight;
 	}
 
 	Vector2 drag() const noexcept{
