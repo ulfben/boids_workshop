@@ -69,10 +69,12 @@ static Vector2 vector_from_angle(float angle, float magnitude) noexcept{
 }
 
 constexpr static Vector2 world_wrap(Vector2 pos, Vector2 world_size) noexcept{
-	if(pos.x > world_size.x) pos.x -= world_size.x;
-	else if(pos.x < 0) pos.x += world_size.x;
-	if(pos.y > world_size.y) pos.y -= world_size.y;
-	else if(pos.y < 0) pos.y += world_size.y;
+	if(pos.x >= world_size.x) pos.x -= world_size.x;
+	else if(pos.x < 0.0f) pos.x += world_size.x;
+
+	if(pos.y >= world_size.y) pos.y -= world_size.y;
+	else if(pos.y < 0.0f) pos.y += world_size.y;
+
 	return pos;
 }
 
@@ -204,7 +206,7 @@ struct Boid final{
 				return true; 
 			}
 			const Vector2 offset = wrapped_offset(position, other->position);
-			return Vector2LengthSqr(offset) > globalConfig.vision_range * globalConfig.vision_range;
+			return Vector2LengthSqr(offset) >= globalConfig.vision_range * globalConfig.vision_range;
 		});
 	}
 
@@ -277,7 +279,7 @@ struct Boid final{
 			Vector2 offset = wrapped_offset(other->position, position);
 			float distance = Vector2Length(offset);
 			if(distance < globalConfig.separation_range){
-				steer += Vector2Normalize(offset) * (globalConfig.separation_range - distance); // normalize a vector pointing away from other, and scale it by the inverse of the distance
+				steer += Vector2Normalize(offset) * (globalConfig.separation_range - distance); // Point away from the neighbour and increase the force the further inside the separation range it is.				
 				++count;
 			}
 		}
@@ -385,20 +387,21 @@ int main(){
 	while(!window.should_close()){
 		float deltaTime = GetFrameTime();
 		if(IsKeyPressed(KEY_SPACE)) isPaused = !isPaused;
+		globalConfig.update();
 
 		if(!isPaused){
 			quad_tree.rebuild(boids);
-			globalConfig.update();
-			const auto size = boids.size(); //cache the loop bound to let the optimizer do its job.
+			
+			const auto size = boids.size();
 
 			// Phase 1: observe current world and calculate forces
-			for(size_t i = 0; i < size; ++i){
+			for(std::size_t i = 0; i < size; ++i){
 				boids[i].update_visible_boids(quad_tree);
 				accelerations[i] = boids[i].calculate_acceleration(obstacles);
 			}
 
 			// Phase 2: actually change the world
-			for(size_t i = 0; i < size; ++i){
+			for(std::size_t i = 0; i < size; ++i){
 				boids[i].update(deltaTime, accelerations[i]);
 			}
 		}
