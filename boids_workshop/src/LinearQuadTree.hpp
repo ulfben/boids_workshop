@@ -27,11 +27,13 @@
 
 // LinearQuadTree stores nodes in a contiguous vector and organizes leaf data contiguously.
 // based on Lisyarus' excellent article: https://lisyarus.github.io/blog/posts/building-a-quadtree.html
+// NOTE: The tree stores non-owning pointers into the supplied span.
+// Objects must remain alive and at stable addresses until the next rebuild or destruction of the tree.
 
 template<class T>
 class LinearQuadTree{
    using node_idx = uint32_t; // index to a node in the 'nodes' vector
-   using index_t = uint32_t; // index to an object in the original collection or data vector
+   using index_t = uint32_t; // index to an object in the 'data' vector
    using count_t = uint32_t; // number of objects in a node or distance between two indexes.
    static constexpr node_idx NO_CHILD = static_cast<node_idx>(-1);
    static constexpr node_idx ROOT_ID = 0;
@@ -132,9 +134,10 @@ class LinearQuadTree{
    }
 
    void query_range_recursive(node_idx nodeIndex, const Rectangle& range, std::vector<const T*>& found) const{
-      if(nodeIndex == NO_CHILD || nodeIndex >= nodes.size()){
+      if(nodeIndex == NO_CHILD){
          return;
       }
+      assert(nodeIndex < nodes.size());
       const Node& node = nodes[nodeIndex];
       if(!CheckCollisionRecs(node.boundary, range)){
          return;
@@ -175,7 +178,7 @@ class LinearQuadTree{
    }
 
 public:
-   LinearQuadTree() = default;
+   LinearQuadTree() = delete; //a zero-bound quad tree would discard everything, so it's kind of pointless. :)
    LinearQuadTree(const Rectangle& boundary_, std::span<const T> objects, count_t capacity_, count_t max_depth_ = 5)
       : boundary(boundary_), capacity(capacity_), max_depth(max_depth_){
       assert(capacity > 0);
