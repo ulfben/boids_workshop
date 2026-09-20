@@ -195,7 +195,7 @@ public:
          }
       }
       if(data.empty()){ return; }
-      nodes.reserve(data.size() / (capacity / 2)); // just a rough estimate, but might save a few re-allocations.
+      nodes.reserve(data.size());
       build_tree(0, static_cast<index_t>(data.size()), boundary, 0);
    }
 
