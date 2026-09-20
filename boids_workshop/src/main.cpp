@@ -75,6 +75,28 @@ constexpr static Vector2 world_wrap(Vector2 pos, Vector2 world_size) noexcept{
 	else if(pos.y < 0) pos.y += world_size.y;
 	return pos;
 }
+
+constexpr static Vector2 wrapped_offset(Vector2 from, Vector2 to) noexcept{
+	Vector2 offset = to - from;
+
+	const float half_width = STAGE_WIDTH * 0.5f;
+	const float half_height = STAGE_HEIGHT * 0.5f;
+
+	if(offset.x > half_width){
+		offset.x -= STAGE_WIDTH;
+	} else if(offset.x < -half_width){
+		offset.x += STAGE_WIDTH;
+	}
+
+	if(offset.y > half_height){
+		offset.y -= STAGE_HEIGHT;
+	} else if(offset.y < -half_height){
+		offset.y += STAGE_HEIGHT;
+	}
+
+	return offset;
+}
+
 struct Obstacle final{
 	Vector2 position = random_range({50.0f, 50.0f}, STAGE_SIZE);
 	float radius = random_range(15.0f, 50.0f);
@@ -142,7 +164,37 @@ struct Boid final{
 
 	void update_visible_boids(const LinearQuadTree<Boid>& quad_tree){
 		visible_boids.clear();
-		quad_tree.query_range(nearby(), visible_boids);
+
+		const Rectangle range = nearby();
+
+		float x_offsets[2]{0.0f, 0.0f};
+		float y_offsets[2]{0.0f, 0.0f};
+
+		int x_count = 1;
+		int y_count = 1;
+
+		if(range.x < 0.0f){
+			x_offsets[x_count++] = STAGE_WIDTH;
+		} else if(range.x + range.width > STAGE_WIDTH){
+			x_offsets[x_count++] = -STAGE_WIDTH;
+		}
+
+		if(range.y < 0.0f){
+			y_offsets[y_count++] = STAGE_HEIGHT;
+		} else if(range.y + range.height > STAGE_HEIGHT){
+			y_offsets[y_count++] = -STAGE_HEIGHT;
+		}
+
+		for(int y = 0; y < y_count; ++y){
+			for(int x = 0; x < x_count; ++x){
+				Rectangle wrapped = range;
+				wrapped.x += x_offsets[x];
+				wrapped.y += y_offsets[y];
+
+				quad_tree.query_range(wrapped, visible_boids);
+			}
+		}
+		std::erase(visible_boids, this); //we don't want ourselves to be included in the list of our neighbours. :) 
 	}
 
 	Rectangle nearby() const noexcept{
