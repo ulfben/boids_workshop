@@ -2,10 +2,12 @@
 #include "raylib.h"
 #include <cassert>
 #include <cstdint>
+#include <cstddef>
 #include <span>
 #include <utility>
 #include <vector>
-
+#include <algorithm>
+#include <memory>
 /**
  * Boids Workshop
  * -------------
@@ -156,7 +158,7 @@ class LinearQuadTree{
       if(objects.empty()){ return {0, 0, 0, 0}; }
       auto [min_x, min_y] = objects[0].position;
       auto [max_x, max_y] = objects[0].position;
-      for(size_t i = 1; i < objects.size(); ++i){
+      for(std::size_t i = 1; i < objects.size(); ++i){
          const auto& pos = objects[i].position;
          if(pos.x < min_x) min_x = pos.x;
          if(pos.x > max_x) max_x = pos.x;
