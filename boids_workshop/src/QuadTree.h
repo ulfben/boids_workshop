@@ -12,7 +12,7 @@
  * While not required, attribution with a link back to the original repository
  * is appreciated if you find this code useful.
  *
- * Copyright (c) 2025, Ulf Benjaminsson
+ * Copyright (c) 2026, Ulf Benjaminsson
  */
 #pragma once
 #include "raylib.h"
