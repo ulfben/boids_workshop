@@ -6,6 +6,23 @@
 #include <utility>
 #include <vector>
 
+/**
+ * Boids Workshop
+ * -------------
+ * This code was written for educational purposes.
+ * Original repository: https://github.com/ulfben/boids_workshop/
+ *
+ * License:
+ * This code is released under a permissive, attribution-friendly license.
+ * You are free to use, modify, and distribute it for any purpose - personal,
+ * educational, or commercial.
+ *
+ * While not required, attribution with a link back to the original repository
+ * is appreciated if you find this code useful.
+ *
+ * Copyright (c) 2026, Ulf Benjaminsson
+ */
+
 // LinearQuadTree stores nodes in a contiguous vector and organizes leaf data contiguously.
 // based on Lisyarus' excellent article: https://lisyarus.github.io/blog/posts/building-a-quadtree.html
 
@@ -72,13 +89,14 @@ class LinearQuadTree{
    // Returns the index of the new node in the 'nodes' vector.
    node_idx build_tree(index_t start, index_t end, const Rectangle& bound, count_t depth){
       assert(start < end);
-      const auto nodeIndex = static_cast<node_idx>(nodes.size());
+      
+      const auto node_index = static_cast<node_idx>(nodes.size());
       nodes.emplace_back(bound, start);
-      Node& node = nodes.back();
-      if(count_t count = end - start;
-         count <= capacity || depth >= max_depth){
-         node.data_count = count;
-         return nodeIndex;
+      const count_t count = end - start;
+      
+      if(count <= capacity || depth >= max_depth){
+          nodes[node_index].data_count = count;
+          return node_index;
       }
 
       // This node will not store any objects; its children will. 
@@ -98,12 +116,17 @@ class LinearQuadTree{
       const float y = bound.y;
       const float w = bound.width * 0.5f;
       const float h = bound.height * 0.5f;
+      const node_idx top_left = build_child_quad(start, idx_split_x_left, {x, y, w, h}, depth);
+      const node_idx top_right = build_child_quad(idx_split_x_left, idx_split_y, {x + w, y, w, h}, depth);
+      const node_idx bottom_left = build_child_quad(idx_split_y, idx_split_x_right, {x, y + h, w, h}, depth);
+      const node_idx bottom_right = build_child_quad(idx_split_x_right, end, {x + w, y + h, w, h}, depth);
 
-      node[Quadrant::TopLeft] = build_child_quad(start, idx_split_x_left, {x, y, w, h}, depth);
-      node[Quadrant::TopRight] = build_child_quad(idx_split_x_left, idx_split_y, {x + w, y, w, h}, depth);
-      node[Quadrant::BottomLeft] = build_child_quad(idx_split_y, idx_split_x_right, {x, y + h, w, h}, depth);
-      node[Quadrant::BottomRight] = build_child_quad(idx_split_x_right, end, {x + w, y + h, w, h}, depth);
-      return nodeIndex;
+      Node& node = nodes[node_index];
+      node[Quadrant::TopLeft] = top_left;
+      node[Quadrant::TopRight] = top_right;
+      node[Quadrant::BottomLeft] = bottom_left;
+      node[Quadrant::BottomRight] = bottom_right;
+      return node_index;
    }
 
    void query_range_recursive(node_idx nodeIndex, const Rectangle& range, std::vector<const T*>& found) const{
